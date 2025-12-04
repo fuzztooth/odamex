@@ -619,6 +619,8 @@ void P_MovePlayer (player_t *player)
 				movefactor >>= 8;
 				bobfactor >>= 8;
 			}
+			movefactor = 0;
+			bobfactor = 0;
 		}
 		forwardmove = (player->cmd.forwardmove * movefactor) >> 8;
 		sidemove = (player->cmd.sidemove * movefactor) >> 8;
