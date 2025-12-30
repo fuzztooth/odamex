@@ -4219,7 +4219,7 @@ BEGIN_COMMAND (playerinfo)
 	}
 	else
 	{
-		PrintFmt(" frags - {:d}  deaths - {:d}  points - %d\n", player->fragcount,
+		PrintFmt(" frags - {:d}  deaths - {:d}  points - {:d}\n", player->fragcount,
 		       player->deathcount, player->points);
 	}
 	if (g_lives)
