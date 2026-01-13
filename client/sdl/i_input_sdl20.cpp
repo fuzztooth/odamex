@@ -135,6 +135,10 @@ void ISDL20KeyboardInputDevice::resume()
 	SDL_EventState(SDL_KEYDOWN, SDL_ENABLE);
 	SDL_EventState(SDL_KEYUP, SDL_ENABLE);
 	SDL_EventState(SDL_TEXTINPUT, SDL_ENABLE);
+#ifdef __ANDROID__
+	// On Android, ensure text input is always enabled for proper character handling
+	SDL_StartTextInput();
+#endif
 }
 
 
@@ -218,7 +222,15 @@ int ISDL20KeyboardInputDevice::getTextEventValue()
 		// we must assume the next SDL_TEXTINPUT event does not correspond to
 		// our original SDL_KEYDOWN event.
 		if (sdl_events[i].type == SDL_KEYDOWN)
+		{
+#ifdef __ANDROID__
+			// On Android with forwarded keyboard, fallback to using the sym value
+			// since TEXTINPUT events may not arrive reliably
+			break;
+#else
 			return 0;
+#endif
+		}
 
 		// Looks like we found a corresponding SDL_TEXTINPUT event
 		if (sdl_events[i].type == SDL_TEXTINPUT)
@@ -302,7 +314,15 @@ void ISDL20KeyboardInputDevice::gatherEvents()
 			// Get the unicode value for the key using the localized keyboard layout
 			// and includes modification via shift, etc.
 			if (sdl_ev.type == SDL_KEYDOWN)
+			{
 				ev.data3 = getTextEventValue();
+#ifdef __ANDROID__
+				// On Android with forwarded keyboard input, fallback to using the sym
+				// for printable ASCII characters if no TEXTINPUT event was generated
+				if (ev.data3 == 0 && sym >= 32 && sym < 127)
+					ev.data3 = sym;
+#endif
+			}
 
 			// Ch0wW : Fixes a problem of ultra-fast repeats.
 			if (sdl_ev.key.repeat != 0)
