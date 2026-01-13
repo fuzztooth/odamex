@@ -49,6 +49,13 @@
     #include "resource.h"
 #endif // WIN32
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
+
+// Forward declaration
+static void I_BuildPixelFormatFromSDLPixelFormatEnum(uint32_t sdl_fmt, PixelFormat* format);
+
 EXTERN_CVAR (vid_fullscreen)
 EXTERN_CVAR (vid_widescreen)
 EXTERN_CVAR (vid_pillarbox)
@@ -281,8 +288,17 @@ ISDL20TextureWindowSurfaceManager::ISDL20TextureWindowSurfaceManager(
 		I_FatalError("I_InitVideo: unable to create SDL2 texture: {}\n", SDL_GetError());
 
 	mSurface = new IWindowSurface(width, height, &mFormat);
-    if (mSurface->getBitsPerPixel() ==8)
+    if (mSurface->getBitsPerPixel() == 8)
+	{
+#ifdef __ANDROID__
+		// Android texture expects: byte0=X, byte1=B, byte2=G, byte3=R
+		// Create XBGR surface to match: A=shift0, B=shift8, G=shift16, R=shift24
+		PixelFormat surface32Format(32, 8, 8, 8, 8, 0, 24, 16, 8);
+		m8bppTo32BppSurface = new IWindowSurface(width, height, &surface32Format);
+#else
         m8bppTo32BppSurface = new IWindowSurface(width, height, mWindow->getPixelFormat());
+#endif
+	}
 }
 
 
@@ -806,8 +822,18 @@ PixelFormat ISDL20Window::buildSurfacePixelFormat(uint8_t bpp)
     uint8_t native_bpp = getPixelFormat()->getBitsPerPixel();
     if (bpp == 8)
         return PixelFormat(8, 0, 0, 0, 0, 0, 0, 0, 0);
-    else if (bpp == 32 && native_bpp == 32)
-        return *getPixelFormat();
+    else if (bpp == 32)
+    {
+#ifdef __ANDROID__
+        // On Android, always use XBGR format for 32-bit mode
+        return PixelFormat(32, 8, 8, 8, 8, 0, 24, 16, 8);
+#else
+        if (native_bpp == 32)
+            return *getPixelFormat();
+        else
+            I_Error("Invalid video surface conversion from {}-bit to {}-bit", bpp, native_bpp);
+#endif
+    }
     else
         I_Error("Invalid video surface conversion from {}-bit to {}-bit", bpp, native_bpp);
     return PixelFormat();   // shush warnings regarding no return value
@@ -884,8 +910,11 @@ bool ISDL20Window::setMode(const IVideoMode& video_mode)
 	{
 #if defined(__SWITCH__)
 		argb_t::setChannels(0, 3, 2, 1);
+#elif defined(__ANDROID__)
+		// Android texture expects: byte0=X, byte1=B, byte2=G, byte3=R
+		argb_t::setChannels(0, 3, 2, 1);  // A=byte0, R=byte3, G=byte2, B=byte1
 #else
-		argb_t::setChannels(3, 2, 1, 0);
+		argb_t::setChannels(3, 2, 1, 0);  // Default for non-Switch platforms
 #endif
 	}
 	mVideoMode.bpp = format.getBitsPerPixel();
