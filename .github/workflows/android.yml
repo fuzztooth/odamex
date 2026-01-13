@@ -54,9 +54,9 @@ jobs:
                 raise SystemExit(f"Missing pattern: {pattern}")
             return match.group(1)
 
-        ndk_version = pick(r"ndkVersion\\s*=\\s*'([^']+)'")
-        cmake_version = pick(r"cmakeVersion\\s*=\\s*'([^']+)'")
-        compile_sdk = pick(r"compileSdkVersion\\s*=\\s*([0-9]+)")
+        ndk_version = pick(r"ndkVersion\s*=\s*'([^']+)'")
+        cmake_version = pick(r"cmakeVersion\s*=\s*'([^']+)'")
+        compile_sdk = pick(r"compileSdkVersion\s*=\s*([0-9]+)")
 
         print(f"ndk_version={ndk_version}")
         print(f"cmake_version={cmake_version}")
