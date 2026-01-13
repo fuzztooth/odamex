@@ -170,6 +170,14 @@ void CopyAssetFiles()
 			"odamex.wad already exists in internal storage");
 	}
 	
+	// Set TIMIDITY_CFG for SDL_mixer - point to assets
+	// SDL_mixer on Android reads from assets, not filesystem
+	std::string timidityConfig = "timidity/timidity.cfg";
+	
+	SDL_setenv("TIMIDITY_CFG", timidityConfig.c_str(), 1);
+	__android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG, 
+		"Set TIMIDITY_CFG=%s (in assets)", timidityConfig.c_str());
+	
 	// Clean up local references
 	env->DeleteLocalRef(assetManager);
 	env->DeleteLocalRef(activityClass);

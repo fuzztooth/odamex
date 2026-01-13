@@ -213,6 +213,27 @@ else
     echo "WARNING: SDL2 Java source not found at $SDL_JAVA_SRC"
 fi
 
+# Download and extract Timidity patches for SDL2_mixer
+echo ""
+echo "========================================"
+echo "Downloading Timidity patches..."
+echo "========================================"
+
+TIMIDITY_URL="https://www.libsdl.org/projects/old/SDL_mixer/timidity/timidity.tar.gz"
+TIMIDITY_TAR="$TEMP_DIR/timidity.tar.gz"
+ASSETS_DIR="$SCRIPT_DIR/app/src/main/assets"
+
+echo "Downloading from: $TIMIDITY_URL"
+curl -L "$TIMIDITY_URL" -o "$TIMIDITY_TAR"
+
+echo "Extracting Timidity patches to assets directory..."
+mkdir -p "$ASSETS_DIR"
+cd "$ASSETS_DIR"
+tar -xzf "$TIMIDITY_TAR"
+echo "✓ Timidity patches extracted to $ASSETS_DIR/timidity"
+rm -f "$TIMIDITY_TAR"
+cd "$SCRIPT_DIR"
+
 # Build SDL2_mixer
 echo ""
 echo "========================================"
