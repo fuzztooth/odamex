@@ -1,6 +1,16 @@
 include(OdamexTargetSettings)
 
-# Find the protobuf we just compiled
+# For Android cross-compilation, use host protoc
+if(ANDROID)
+  set(_HOST_PROTOC_PATH "${CMAKE_SOURCE_DIR}/libraries/protobuf-host/bin/protoc.exe")
+  if(EXISTS "${_HOST_PROTOC_PATH}")
+    set(protobuf_PROTOC_EXE "${_HOST_PROTOC_PATH}" CACHE FILEPATH "Host protoc for cross-compilation" FORCE)
+    message(STATUS "odaproto: Using host protoc at ${_HOST_PROTOC_PATH}")
+  else()
+    message(FATAL_ERROR "Host protoc not found at ${_HOST_PROTOC_PATH}. Run build-protoc.sh first.")
+  endif()
+endif()
+
 find_package(protobuf
   PATHS
     "${CMAKE_CURRENT_BINARY_DIR}/../libraries/protobuf-build/cmake"

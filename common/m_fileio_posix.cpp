@@ -46,6 +46,10 @@
 #endif
 #include <dirent.h>
 
+#ifdef __ANDROID__
+#include <SDL.h>
+#endif
+
 #include "cmdlib.h"
 #include "i_system.h"
 #include "m_argv.h"
@@ -108,6 +112,22 @@ std::string M_GetBinaryDir()
 
 std::string M_GetHomeDir(const std::string& user)
 {
+#ifdef __ANDROID__
+	// On Android, use SDL's internal storage path instead of HOME
+	// This is initialized by Android::InitializePaths()
+	const char* internal = SDL_AndroidGetInternalStoragePath();
+	if (internal)
+	{
+		std::string home = internal;
+		if (home[home.length() - 1] != PATHSEPCHAR)
+		{
+			home += PATHSEP;
+		}
+		return home;
+	}
+	I_FatalError("Failed to get Android internal storage path");
+	return "";
+#else
 	const char* envhome = getenv("HOME");
 	std::string home = (envhome != NULL) ? envhome : "";
 
@@ -131,16 +151,22 @@ std::string M_GetHomeDir(const std::string& user)
 	{
 		home += PATHSEP;
 	}
-#endif
+#endif // __SWITCH__
 
 	return home;
+#endif // __ANDROID__
 }
 
 std::string M_GetUserDir()
 {
+#ifdef __ANDROID__
+	// On Android, don't use a hidden .odamex folder, just use the internal storage directly
+	return M_GetHomeDir();
+#else
 	fs::path path = M_GetHomeDir();
 	path /= ".odamex";
 	return path.string();
+#endif
 }
 
 std::string M_GetWriteDir()

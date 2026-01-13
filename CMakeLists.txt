@@ -85,6 +85,10 @@ if (NSWITCH)
 	include("switch.cmake" REQUIRED)  # Nintendo Switch
 endif()
 
+if (ANDROID)
+	include("android.cmake" REQUIRED)  # Android
+endif()
+
 # Ensure that we can use folders in projects.
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
@@ -98,6 +102,8 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^alpha")
   set(ODAMEX_TARGET_ARCH "alpha")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
   set(ODAMEX_TARGET_ARCH "arm")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^aarch64")
+  set(ODAMEX_TARGET_ARCH "aarch64")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(powerpc|ppc)64")
   set(ODAMEX_TARGET_ARCH "ppc64")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(powerpc|ppc)")

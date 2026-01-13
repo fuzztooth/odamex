@@ -1,0 +1,26 @@
+// Centralized version definitions for Odamex Android build
+// Update these values to upgrade dependencies across the entire project
+
+ext {
+    // Android SDK versions
+    compileSdkVersion = 36
+    minSdkVersion = 23
+    targetSdkVersion = 34
+    
+    // Application version
+    appVersionCode = 1
+    appVersionName = '12.1.0'
+    
+    // Build tools
+    androidGradlePluginVersion = '8.13.2'
+    cmakeVersion = '3.22.1'
+    ndkVersion = '27.0.12077973'
+    
+    // SDL libraries
+    sdl2Version = '2.30.8'
+    sdl2MixerVersion = '2.8.0'
+    
+    // AndroidX dependencies
+    appCompatVersion = '1.6.1'
+    materialVersion = '1.11.0'
+}

@@ -83,7 +83,9 @@
 #include "g_mapinfo.h"
 #include "g_horde.h"
 #include "w_ident.h"
+#ifndef GCONSOLE
 #include "gui_boot.h"
+#endif
 #include "g_musinfo.h"
 #include "g_episode.h"
 
@@ -875,6 +877,7 @@ void D_DoomMain()
 
 		if (!shouldSkip)
 		{
+#ifndef GCONSOLE
 			scannedWADs_t wads = GUI_BootWindow();
 			iwad = wads.iwad;
 			pwads = wads.pwads;
@@ -883,6 +886,7 @@ void D_DoomMain()
 			{
 				Args.AppendArg(option.c_str());
 			}
+#endif
 		}
 	}
 

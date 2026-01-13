@@ -32,6 +32,9 @@
 #ifdef __SWITCH__
 #include "nx_system.h"
 #endif
+#ifdef __ANDROID__
+#include "android_system.h"
+#endif
 #endif
 
 #include <new>
@@ -92,8 +95,11 @@ void STACK_ARGS nx_early_deinit (void)
 #endif
 
 
-#if defined GCONSOLE && !defined __SWITCH__
+#if defined GCONSOLE && !defined __SWITCH__ && !defined __ANDROID__
 int I_Main(int argc, char *argv[])
+#elif defined __ANDROID__
+// SDL2 on Android expects an extern "C" function called SDL_main
+extern "C" int SDL_main(int argc, char *argv[])
 #else
 int main(int argc, char *argv[])
 #endif
@@ -109,6 +115,11 @@ int main(int argc, char *argv[])
 #if defined(__SWITCH__)
 		nx_early_init();
 		atterm(nx_early_deinit);
+#endif
+
+#if defined(__ANDROID__)
+		// Initialize Android-specific paths (must be done before any file I/O)
+		Android::InitializePaths();
 #endif
 
 #if defined(UNIX) && !defined(GCONSOLE)

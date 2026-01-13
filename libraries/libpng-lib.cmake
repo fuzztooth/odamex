@@ -26,6 +26,28 @@ if(BUILD_CLIENT)
       "-DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/local"
       "-DPNG_SHARED=OFF"
       "-DPNG_TESTS=OFF")
+    if(CMAKE_MAKE_PROGRAM)
+      list(APPEND _LIBPNG_GEN_ARGS "-DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}")
+    endif()
+    if(CMAKE_TOOLCHAIN_FILE)
+      list(APPEND _LIBPNG_GEN_ARGS "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
+    endif()
+    if(ANDROID)
+      # Pass Android-specific variables to libpng build
+      if(ANDROID_ABI)
+        list(APPEND _LIBPNG_GEN_ARGS "-DANDROID_ABI=${ANDROID_ABI}")
+      endif()
+      if(ANDROID_PLATFORM)
+        list(APPEND _LIBPNG_GEN_ARGS "-DANDROID_PLATFORM=${ANDROID_PLATFORM}")
+      endif()
+      if(ANDROID_NDK)
+        list(APPEND _LIBPNG_GEN_ARGS "-DANDROID_NDK=${ANDROID_NDK}")
+      endif()
+      # Disable ARM NEON for Android to avoid ASM compiler issues
+      list(APPEND _LIBPNG_GEN_ARGS
+        "-DPNG_ARM_NEON=off"
+        "-DPNG_ARM_NEON_CHECK_SUPPORTED=off")
+    endif()
     if(APPLE)
       list(APPEND _LIBPNG_GEN_ARGS
         "-DPNG_ARM_NEON=off"

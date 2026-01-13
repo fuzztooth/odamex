@@ -35,6 +35,12 @@ if (GCONSOLE)
     file(GLOB CLIENT_SOURCES ${CLIENT_SOURCES} switch/*.cpp)
     odamex_target_settings_nx(CLIENT_DIR GLOB)
   endif()
+  
+  if (ANDROID)
+    set(CLIENT_DIR ${CLIENT_DIR} android)  # Android
+    file(GLOB CLIENT_HEADERS ${CLIENT_HEADERS} android/*.h)
+    file(GLOB CLIENT_SOURCES ${CLIENT_SOURCES} android/*.cpp)
+  endif()
 endif()
 
 if(NOT GCONSOLE)
@@ -129,6 +135,11 @@ if(APPLE)
     ${AUDIOUNIT_LIBRARY})
 endif()
 
+# Android SDL2 configuration
+if(ANDROID)
+  include("${CMAKE_SOURCE_DIR}/android/sdl2-android.cmake")
+endif()
+
 # Client target
 if(TARGET SDL2::SDL2 OR TARGET SDL::SDL)
 
@@ -155,8 +166,14 @@ if(TARGET SDL2::SDL2 OR TARGET SDL::SDL)
     include_directories(../common)
   endif()
 
-  add_executable(odamex MACOSX_BUNDLE WIN32
-    ${CLIENT_SOURCES} ${CLIENT_SDL_SOURCES} ${COMMON_SOURCES} ${CLIENT_GUI_SOURCES})
+  if(ANDROID)
+    # Android needs a shared library, not an executable
+    add_library(odamex SHARED
+      ${CLIENT_SOURCES} ${CLIENT_SDL_SOURCES} ${COMMON_SOURCES} ${CLIENT_GUI_SOURCES})
+  else()
+    add_executable(odamex MACOSX_BUNDLE WIN32
+      ${CLIENT_SOURCES} ${CLIENT_SDL_SOURCES} ${COMMON_SOURCES} ${CLIENT_GUI_SOURCES})
+  endif()
   odamex_target_settings(odamex)
 
   if(USE_DEFAULT_SIMD)
@@ -193,18 +210,31 @@ if(TARGET SDL2::SDL2 OR TARGET SDL::SDL)
 
   target_link_libraries(odamex ${TEXTSCREEN_LIBRARY})
   target_link_libraries(odamex odamex-common odaproto tinylibs)
-  if(TARGET SDL::SDL)
+  
+  # SDL2 linking - handle both prefab (Android) and regular SDL2
+  if(ANDROID)
+    # Android uses prefab which provides SDL2::SDL2 and SDL2_mixer::SDL2_mixer
+    target_link_libraries(odamex SDL2::SDL2)
+    target_link_libraries(odamex SDL2_mixer::SDL2_mixer)
+  elseif(TARGET SDL::SDL)
     target_link_libraries(odamex SDL::SDL)
     if(TARGET SDL::SDLmain)
       target_link_libraries(odamex SDL::SDLmain)
     endif()
-    target_link_libraries(odamex SDL::mixer)
+    if(TARGET SDL::mixer)
+      target_link_libraries(odamex SDL::mixer)
+    endif()
   else()
     target_link_libraries(odamex SDL2::SDL2)
     if(TARGET SDL2::SDL2main)
       target_link_libraries(odamex SDL2::SDL2main)
     endif()
-    target_link_libraries(odamex SDL2::mixer)
+    if(TARGET SDL2::mixer)
+      get_target_property(_mixer_type SDL2::mixer TYPE)
+      if(NOT _mixer_type STREQUAL "INTERFACE_LIBRARY")
+        target_link_libraries(odamex SDL2::mixer)
+      endif()
+    endif()
   endif()
 
   if(NOT GCONSOLE)
@@ -237,11 +267,13 @@ if(TARGET SDL2::SDL2 OR TARGET SDL::SDL)
     target_link_libraries(odamex ${APPLE_FRAMEWORKS})
   elseif(NSWITCH)
     target_link_libraries(odamex SDL2 mpg123 modplug vorbisfile vorbis opusfile opus ogg EGL glapi drm_nouveau nx m)
+  elseif(ANDROID)
+    target_link_libraries(odamex log android m)
   elseif(SOLARIS)
     target_link_libraries(odamex socket nsl)
   endif()
 
-  if(UNIX AND NOT APPLE)
+  if(UNIX AND NOT APPLE AND NOT ANDROID)
     target_link_libraries(odamex rt)
     if(X11_FOUND)
       target_link_libraries(odamex X11)

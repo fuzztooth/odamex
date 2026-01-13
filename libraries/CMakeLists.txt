@@ -45,6 +45,29 @@ function(lib_buildgen)
     "-DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/local"
     "-DCMAKE_INSTALL_LIBDIR=lib") # Without this, CentOS installs into lib64
 
+  # Pass CMAKE_MAKE_PROGRAM for Ninja
+  if(CMAKE_MAKE_PROGRAM)
+    list(APPEND _COMMAND "-DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}")
+  endif()
+
+  # Pass Android toolchain file if building for Android
+  if(CMAKE_TOOLCHAIN_FILE)
+    list(APPEND _COMMAND "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
+  endif()
+
+  if(ANDROID)
+    # Pass Android-specific variables to library builds
+    if(ANDROID_ABI)
+      list(APPEND _COMMAND "-DANDROID_ABI=${ANDROID_ABI}")
+    endif()
+    if(ANDROID_PLATFORM)
+      list(APPEND _COMMAND "-DANDROID_PLATFORM=${ANDROID_PLATFORM}")
+    endif()
+    if(ANDROID_NDK)
+      list(APPEND _COMMAND "-DANDROID_NDK=${ANDROID_NDK}")
+    endif()
+  endif()
+
   if(CMAKE_GENERATOR_PLATFORM)
     list(APPEND _COMMAND -A)
     list(APPEND _COMMAND ${CMAKE_GENERATOR_PLATFORM})

@@ -64,7 +64,7 @@
 #include <stdarg.h>
 #include <sys/types.h>
 
-#ifndef __OpenBSD__
+#if !defined(__OpenBSD__) && !defined(ANDROID)
 	#include <sys/timeb.h>
 #endif
 
@@ -86,7 +86,6 @@
 #include "cl_main.h"
 #include "gi.h"
 #include "m_fileio.h"
-#include "txt_main.h"
 
 #ifndef GCONSOLE // I will add this back later -- Hyper_Eye
 	// For libtextscreen to link properly

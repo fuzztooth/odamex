@@ -1,0 +1,227 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'net.odamex.android'
+    compileSdk rootProject.ext.compileSdkVersion
+
+    defaultConfig {
+        applicationId "net.odamex.android"
+        minSdk rootProject.ext.minSdkVersion
+        targetSdk rootProject.ext.targetSdkVersion
+        versionCode rootProject.ext.appVersionCode
+        versionName rootProject.ext.appVersionName
+
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID=ON",
+                          "-DANDROID_STL=c++_shared",
+                          "-DCMAKE_BUILD_TYPE=Debug",
+                          "-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH",
+                          "-DCMAKE_GENERATOR=Ninja",
+                          "-DBUILD_CLIENT=ON",
+                          "-DUSE_INTERNAL_CURL=ON"
+                cppFlags "-std=c++17"
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
+            
+            externalNativeBuild {
+                cmake {
+                    arguments "-DCMAKE_BUILD_TYPE=Release",
+                              "-DCMAKE_GENERATOR=Ninja"
+                }
+            }
+        }
+        debug {
+            jniDebuggable true
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file('../../CMakeLists.txt')
+            version rootProject.ext.cmakeVersion
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['src/main/jniLibs']
+            assets.srcDirs = ['src/main/assets']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    
+    buildFeatures {
+        prefab true
+    }
+}
+
+// Build host protoc before CMake configuration
+tasks.register('buildHostProtoc') {
+    description 'Build protoc compiler for host platform'
+    
+    doLast {
+        def protocPath = file('src/main/cpp/protoc/protoc.exe')
+        
+        if (protocPath.exists()) {
+            println "Host protoc already exists at ${protocPath}, skipping build"
+            
+            // Copy to build directories for both ABIs
+            ['arm64-v8a', 'armeabi-v7a'].each { abi ->
+                def destDir = file(".cxx/Debug/54633h3p/${abi}/libraries/protobuf-build")
+                if (destDir.exists()) {
+                    def destFile = new File(destDir, 'protoc.exe')
+                    if (!destFile.exists()) {
+                        println "Copying protoc.exe to ${destFile}"
+                        destFile.parentFile.mkdirs()
+                        java.nio.file.Files.copy(protocPath.toPath(), destFile.toPath(), 
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                    }
+                }
+            }
+        } else {
+            throw new GradleException("""
+Host protoc not found at ${protocPath}.
+Please run the following command from Git Bash first:
+  cd android && bash ./build-protoc.sh
+""")
+        }
+    }
+}
+
+// Make CMake configuration depend on host protoc being built
+tasks.matching { it.name.startsWith('configureCMake') || it.name.startsWith('buildCMake') }.configureEach {
+    dependsOn buildHostProtoc
+}
+
+// Task to copy SDL2 headers to CMake include directories
+tasks.register('copySDL2Headers') {
+    description 'Copy SDL2 headers from jniLibs to CMake include directories'
+    
+    doLast {
+        def sourceDir = file('src/main/cpp/SDL2-headers')
+        
+        if (!sourceDir.exists()) {
+            println "SDL2 headers not found at ${sourceDir}. Run build-sdl2.sh first."
+            return
+        }
+        
+        // Copy to both ABI build directories
+        ['arm64-v8a', 'armeabi-v7a'].each { abi ->
+            def destDir = file(".cxx/Debug/54633h3p/${abi}/libraries/local/include")
+            if (destDir.exists()) {
+                println "Copying SDL2 headers to ${destDir}"
+                copy {
+                    from sourceDir
+                    into destDir
+                }
+            }
+        }
+    }
+}
+
+// Run copySDL2Headers after CMake configuration
+tasks.matching { it.name.startsWith('configureCMake') }.configureEach {
+    finalizedBy copySDL2Headers
+}
+
+// Task to build SDL2 libraries if they don't exist
+task buildSDL2(type: Exec) {
+    description = 'Build SDL2 libraries for Android if not present'
+    
+    def jniLibsDir = file("src/main/jniLibs")
+    def arm64Lib = file("src/main/jniLibs/arm64-v8a/libSDL2.so")
+    def armv7Lib = file("src/main/jniLibs/armeabi-v7a/libSDL2.so")
+    
+    // Only run if libraries don't exist
+    onlyIf {
+        !arm64Lib.exists() || !armv7Lib.exists()
+    }
+    
+    workingDir '../'
+    
+    // Use bash on Unix-like systems, git bash on Windows
+    if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+        commandLine 'bash', 'build-sdl2.sh'
+    } else {
+        commandLine './build-sdl2.sh'
+    }
+    
+    doFirst {
+        println "SDL2 libraries not found, building from source..."
+        println "This may take several minutes on first build..."
+    }
+    
+    doLast {
+        println "SDL2 build complete!"
+    }
+}
+
+// Make sure SDL2 is built before we start compiling
+tasks.whenTaskAdded { task ->
+    if (task.name == 'preBuild') {
+        task.dependsOn buildSDL2
+    }
+}
+
+// Task to download SDL2 prebuilt libraries
+task downloadSDL2 {
+    doLast {
+        def sdlVersion = rootProject.ext.sdl2Version
+        def mixerVersion = rootProject.ext.sdl2MixerVersion
+        def baseUrl = "https://github.com/libsdl-org/SDL/releases/download/release-${sdlVersion}/"
+        def mixerUrl = "https://github.com/libsdl-org/SDL_mixer/releases/download/release-${mixerVersion}/"
+        
+        def jniLibsDir = file("src/main/jniLibs")
+        jniLibsDir.mkdirs()
+        
+        println "Downloading SDL2 prebuilt Android libraries..."
+        println "This will be downloaded to: ${jniLibsDir}"
+        println ""
+        println "Note: SDL2 provides source releases. You'll need to either:"
+        println "1. Build SDL2 for Android manually and place .so files in src/main/jniLibs/"
+        println "2. Or we can add SDL2 source as a submodule"
+        println ""
+        println "For now, please download SDL2 Android libraries from:"
+        println "  https://github.com/libsdl-org/SDL/releases"
+        println "  https://github.com/libsdl-org/SDL_mixer/releases"
+        println ""
+        println "Extract libSDL2.so and libSDL2_mixer.so to:"
+        println "  ${jniLibsDir}/arm64-v8a/"
+        println "  ${jniLibsDir}/armeabi-v7a/"
+    }
+}
+
+dependencies {
+    implementation "androidx.appcompat:appcompat:${rootProject.ext.appCompatVersion}"
+    implementation "com.google.android.material:material:${rootProject.ext.materialVersion}"
+    
+    // SDL2 libraries - using prebuilt AARs that will be added to jniLibs
+    // SDL2 is not currently available on Maven Central
+    // We'll need to either:
+    // 1. Use prebuilt SDL2 .so files in jniLibs, OR
+    // 2. Build SDL2 as part of the CMake build
+    // For now, commenting out until we add the libraries
+    // implementation 'org.libsdl:SDL2:2.30.8'
+    // implementation 'org.libsdl:SDL2_mixer:2.8.0'
+}
