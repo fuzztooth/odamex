@@ -81,20 +81,21 @@ tasks.register('buildHostProtoc') {
     description 'Build protoc compiler for host platform'
     
     doLast {
-        def protocPath = file('src/main/cpp/protoc/protoc.exe')
-        
+        def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+        def protocPath = file(isWindows ? 'src/main/cpp/protoc/protoc.exe' : 'src/main/cpp/protoc/protoc')
+
         if (protocPath.exists()) {
             println "Host protoc found at ${protocPath}"
-            
+
             // Copy to where CMake expects it (libraries/protobuf-host/bin/)
             def destDir = file('../../libraries/protobuf-host/bin')
             destDir.mkdirs()
-            def destFile = new File(destDir, 'protoc.exe')
-            
-            println "Copying protoc.exe to ${destFile}"
-            java.nio.file.Files.copy(protocPath.toPath(), destFile.toPath(), 
+            def destFile = new File(destDir, isWindows ? 'protoc.exe' : 'protoc')
+
+            println "Copying protoc to ${destFile}"
+            java.nio.file.Files.copy(protocPath.toPath(), destFile.toPath(),
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-            println "✓ Host protoc ready for CMake"
+            println "Host protoc ready for CMake"
         } else {
             throw new GradleException("""
 Host protoc not found at ${protocPath}.
@@ -102,6 +103,7 @@ Please run the following command from Git Bash first:
   cd android && bash ./build-protoc.sh
 """)
         }
+    }
     }
 }
 

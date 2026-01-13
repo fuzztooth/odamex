@@ -1,0 +1,122 @@
+name: Android
+
+on:
+  push:
+    branches-ignore:
+    - 'release/[0-9]+.[0-9]+.[0-9]+'
+    paths-ignore:
+    - "**/*.md"
+    - README
+    - LICENSE
+    - MAINTAINERS
+    - CHANGELOG
+    - 3RD-PARTY-LICENSES
+    - config-samples/*
+    - documentation/**
+    - tools/**
+  pull_request:
+
+jobs:
+  pre_job:
+    name: Build Preparation
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.check_skip.outputs.should_skip }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Check for build skip
+        id: check_skip
+        run: bash ci/check-skip.sh
+  build-android:
+    name: Build (Android)
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v4
+    - name: Checkout submodules
+      run: git submodule update --init --recursive
+    - name: Read Android toolchain versions
+      id: versions
+      shell: bash
+      run: |
+        python - <<'PY' >> "$GITHUB_OUTPUT"
+        import re
+        from pathlib import Path
+
+        deps = Path("android/gradle/dependencies.gradle").read_text()
+
+        def pick(pattern: str) -> str:
+            match = re.search(pattern, deps)
+            if not match:
+                raise SystemExit(f"Missing pattern: {pattern}")
+            return match.group(1)
+
+        ndk_version = pick(r"ndkVersion\\s*=\\s*'([^']+)'")
+        cmake_version = pick(r"cmakeVersion\\s*=\\s*'([^']+)'")
+        compile_sdk = pick(r"compileSdkVersion\\s*=\\s*([0-9]+)")
+
+        print(f"ndk_version={ndk_version}")
+        print(f"cmake_version={cmake_version}")
+        print(f"compile_sdk={compile_sdk}")
+        PY
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: 17
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+    - name: Install Android SDK packages
+      shell: bash
+      run: |
+        yes | sdkmanager --licenses
+        sdkmanager \
+          "platform-tools" \
+          "platforms;android-${{ steps.versions.outputs.compile_sdk }}" \
+          "build-tools;${{ steps.versions.outputs.compile_sdk }}.0.0" \
+          "ndk;${{ steps.versions.outputs.ndk_version }}" \
+          "cmake;${{ steps.versions.outputs.cmake_version }}"
+    - name: Build host protoc
+      shell: bash
+      run: |
+        set -euo pipefail
+        cmake -S libraries/protobuf/cmake -B build-protoc-host \
+          -DCMAKE_BUILD_TYPE=Release \
+          -Dprotobuf_BUILD_SHARED_LIBS=OFF \
+          -Dprotobuf_BUILD_TESTS=OFF
+        cmake --build build-protoc-host --target protoc
+        protoc_path=$(find build-protoc-host -type f -name protoc -perm /111 | head -n 1)
+        if [ -z "${protoc_path}" ]; then
+          echo "protoc not found after build" >&2
+          exit 1
+        fi
+        mkdir -p android/app/src/main/cpp/protoc
+        cp "${protoc_path}" android/app/src/main/cpp/protoc/protoc
+    - name: Build SDL2 libraries
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd android
+        bash ./build-sdl2.sh
+    - name: Ensure odamex.wad placeholder
+      shell: bash
+      run: |
+        mkdir -p android/app/src/main/assets
+        if [ ! -f android/app/src/main/assets/odamex.wad ]; then
+          touch android/app/src/main/assets/odamex.wad
+        fi
+    - name: Build APK (Debug)
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd android
+        chmod +x ./gradlew
+        ./gradlew assembleDebug --no-daemon
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Odamex-Android-Debug
+        path: android/app/build/outputs/apk/debug/*.apk
