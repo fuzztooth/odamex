@@ -39,6 +39,10 @@
 #include <dirent.h>
 #endif
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
+
 #include <stdlib.h>
 
 #include "m_alloc.h"
@@ -428,6 +432,15 @@ void D_AddPlatformSearchDirs(std::vector<std::string> &dirs)
 	D_AddSearchDir(dirs, "\\doom", separator);     // Shareware / Registered Doom
 	D_AddSearchDir(dirs, "\\dooms", separator);    // Shareware versions
 	D_AddSearchDir(dirs, "\\doomsw", separator);
+
+	#elif defined(__ANDROID__)
+	
+	const char separator = ':';
+	
+	// Android: Add internal storage wads directory
+	D_AddSearchDir(dirs, "/data/data/net.odamex.android/files/wads", separator);
+	D_AddSearchDir(dirs, "/data/data/net.odamex.android/files", separator);
+	D_AddSearchDir(dirs, "/storage/emulated/0/Android/data/net.odamex.android/files", separator);
 
 	#elif defined(UNIX)
 
