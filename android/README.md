@@ -41,6 +41,9 @@ bash ./build-sdl2.sh
 
 # Build protoc compiler (for protobuf code generation)
 bash ./build-protoc.sh
+
+# Build odamex.wad (game resource file)
+bash ./build-wad.sh
 ```
 
 These scripts:
@@ -48,6 +51,18 @@ These scripts:
 - Build for Android (arm64-v8a and armeabi-v7a)
 - Copy artifacts to the Android project
 - Clean up temp files on next run
+
+**What they build:**
+- `build-sdl2.sh` → SDL2 + SDL2_mixer native libraries
+- `build-protoc.sh` → protoc.exe for host platform
+- `build-wad.sh` → odamex.wad from wad/ source files
+
+### 1.5. Add Game IWAD
+
+The engine requires a DOOM IWAD to run. Copy one to `android/app/src/main/assets/`:
+- **DOOM.WAD** - Original DOOM
+- **DOOM2.WAD** - DOOM II
+- **FREEDOOM1.WAD** / **FREEDOOM2.WAD** - Free alternatives from https://freedoom.github.io/
 
 ### 2. Build APK
 

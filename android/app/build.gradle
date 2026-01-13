@@ -84,21 +84,17 @@ tasks.register('buildHostProtoc') {
         def protocPath = file('src/main/cpp/protoc/protoc.exe')
         
         if (protocPath.exists()) {
-            println "Host protoc already exists at ${protocPath}, skipping build"
+            println "Host protoc found at ${protocPath}"
             
-            // Copy to build directories for both ABIs
-            ['arm64-v8a', 'armeabi-v7a'].each { abi ->
-                def destDir = file(".cxx/Debug/54633h3p/${abi}/libraries/protobuf-build")
-                if (destDir.exists()) {
-                    def destFile = new File(destDir, 'protoc.exe')
-                    if (!destFile.exists()) {
-                        println "Copying protoc.exe to ${destFile}"
-                        destFile.parentFile.mkdirs()
-                        java.nio.file.Files.copy(protocPath.toPath(), destFile.toPath(), 
-                            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-                    }
-                }
-            }
+            // Copy to where CMake expects it (libraries/protobuf-host/bin/)
+            def destDir = file('../../libraries/protobuf-host/bin')
+            destDir.mkdirs()
+            def destFile = new File(destDir, 'protoc.exe')
+            
+            println "Copying protoc.exe to ${destFile}"
+            java.nio.file.Files.copy(protocPath.toPath(), destFile.toPath(), 
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            println "✓ Host protoc ready for CMake"
         } else {
             throw new GradleException("""
 Host protoc not found at ${protocPath}.
@@ -158,17 +154,41 @@ task buildSDL2(type: Exec) {
         !arm64Lib.exists() || !armv7Lib.exists()
     }
     
-    workingDir '../'
+    workingDir file('..')
     
-    // Use bash on Unix-like systems, git bash on Windows
+    // Set environment variables
+    environment 'ANDROID_HOME', System.getenv('ANDROID_HOME') ?: android.sdkDirectory.absolutePath
+    
+    // Use bash - on Windows, use Git Bash explicitly
     if (System.getProperty('os.name').toLowerCase().contains('windows')) {
-        commandLine 'bash', 'build-sdl2.sh'
+        // Find Git Bash
+        def gitBashPaths = [
+            'C:\\Program Files\\Git\\bin\\bash.exe',
+            'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+            System.getenv('PROGRAMFILES') + '\\Git\\bin\\bash.exe'
+        ]
+        
+        def bashExe = null
+        for (path in gitBashPaths) {
+            def exe = new File(path)
+            if (exe.exists()) {
+                bashExe = path
+                break
+            }
+        }
+        
+        if (bashExe == null) {
+            throw new GradleException("Git Bash not found. Please install Git for Windows.")
+        }
+        
+        commandLine bashExe, 'build-sdl2.sh'
     } else {
         commandLine './build-sdl2.sh'
     }
     
     doFirst {
         println "SDL2 libraries not found, building from source..."
+        println "ANDROID_HOME: ${environment['ANDROID_HOME']}"
         println "This may take several minutes on first build..."
     }
     
@@ -177,9 +197,15 @@ task buildSDL2(type: Exec) {
     }
 }
 
-// Make sure SDL2 is built before we start compiling
+// Make sure SDL2 is built before we start compiling and before CMake runs
 tasks.whenTaskAdded { task ->
     if (task.name == 'preBuild') {
+        task.dependsOn buildSDL2
+    }
+    // Also add dependency for CMake configuration tasks (these are created dynamically)
+    if (task.name.startsWith('configureCMake') || 
+        task.name.startsWith('buildCMake') || 
+        task.name.startsWith('externalNativeBuild')) {
         task.dependsOn buildSDL2
     }
 }

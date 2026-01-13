@@ -31,6 +31,9 @@ namespace Android
 // Initialize Android-specific subsystems
 void InitializePaths();
 
+// Copy essential files from APK assets to internal storage
+void CopyAssetFiles();
+
 // Get platform-specific paths
 const char* GetWadsPath();
 const char* GetConfigPath();

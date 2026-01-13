@@ -54,11 +54,24 @@ bash ./build-sdl2.sh
 
 # Build protoc compiler for host
 bash ./build-protoc.sh
+
+# Build odamex.wad
+bash ./build-wad.sh
 ```
 
 **What these do**:
 - `build-sdl2.sh` - Downloads and builds SDL2 + SDL2_mixer for Android
 - `build-protoc.sh` - Builds protoc.exe for protobuf code generation
+- `build-wad.sh` - Downloads DeuTex and builds odamex.wad
+
+### Step 1.5: Add Game IWAD (Required)
+
+The engine needs a DOOM IWAD to run. Copy one of these to `android/app/src/main/assets/`:
+- **DOOM.WAD** - Original DOOM (shareware or registered)
+- **DOOM2.WAD** - DOOM II  
+- **FREEDOOM1.WAD** / **FREEDOOM2.WAD** - Free alternatives
+
+Download Freedoom from: https://freedoom.github.io/
 
 ### Step 2: Build APK
 
@@ -87,20 +100,6 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 # Launch app
 adb shell am start -n net.odamex.android/.MainActivity
 ```
-
-## Adding Game Data
-
-The app requires `odamex.wad` to run. Add it to:
-```
-android/app/src/main/assets/odamex.wad
-```
-
-Get `odamex.wad` from:
-- Build it: `cd wad/ && deutex -make odamex.txt`
-- Download from Odamex releases
-- Copy from existing Odamex installation
-
-You can also add DOOM.WAD, DOOM2.WAD, or other IWADs.
 
 ## Clean Rebuild
 
@@ -131,5 +130,6 @@ bash ./build-protoc.sh
 **"bash: command not found"** (Windows): Install Git Bash or use WSL
 
 **Build fails with Java errors**: Ensure `JAVA_HOME` is set correctly
+bash ./build-wad.sh
 
 **SDL2 build fails**: Check that curl and unzip are installed
