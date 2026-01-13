@@ -104,7 +104,6 @@ Please run the following command from Git Bash first:
 """)
         }
     }
-    }
 }
 
 // Make CMake configuration depend on host protoc being built

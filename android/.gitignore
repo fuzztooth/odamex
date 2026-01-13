@@ -43,4 +43,7 @@ app/src/main/jniLibs/
 # SDL2 Java source files (copied by build-sdl2.sh from SDL2 source)
 app/src/main/java/org/
 
+# Timidity content
+app/src/main/assets/timidity/
+
 *.log

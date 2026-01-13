@@ -25,6 +25,10 @@
 
 #include "cl_download.h"
 
+#ifdef ANDROID
+#include <SDL_system.h>
+#endif
+
 #ifndef CURL_STATICLIB
 #define CURL_STATICLIB
 #endif
@@ -330,6 +334,22 @@ static StringTokens GetDownloadDirs()
 #endif
 
 	D_AddSearchDir(dirs, waddirs.cstring(), PATHLISTSEPCHAR);
+
+#ifdef ANDROID
+	// Add Android storage paths for WAD files
+	const char* internal = SDL_AndroidGetInternalStoragePath();
+	const char* external = SDL_AndroidGetExternalStoragePath();
+	if (internal)
+	{
+		dirs.push_back(std::string(internal) + "/wads");
+		dirs.push_back(internal);
+	}
+	if (external)
+	{
+		dirs.push_back(std::string(external) + "/wads");
+		dirs.push_back(external);
+	}
+#endif
 
 #ifdef __SWITCH__
 	dirs.push_back("./wads");
