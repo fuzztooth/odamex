@@ -74,6 +74,12 @@ android {
     buildFeatures {
         prefab true
     }
+    
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "odamex-${variant.buildType.name}.apk"
+        }
+    }
 }
 
 // Build host protoc before CMake configuration

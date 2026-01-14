@@ -72,7 +72,7 @@ jobs:
     - name: Install Android SDK packages
       shell: bash
       run: |
-        yes | sdkmanager --licenses
+        yes | sdkmanager --licenses || true
         sdkmanager \
           "platform-tools" \
           "platforms;android-${{ steps.versions.outputs.compile_sdk }}" \
