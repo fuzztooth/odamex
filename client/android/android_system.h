@@ -43,4 +43,7 @@ void LogMessage(int priority, const char* fmt, ...);
 
 } // namespace Android
 
+// Apply Android-specific defaults (call after cvar system initialized)
+extern void Android_ApplyDefaults();
+
 #endif // ANDROID

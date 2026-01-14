@@ -89,6 +89,10 @@
 #include "g_musinfo.h"
 #include "g_episode.h"
 
+#ifdef ANDROID
+#include "../android/android_system.h"
+#endif
+
 extern size_t got_heapsize;
 
 void D_CheckNetGame();
@@ -941,6 +945,12 @@ void D_DoomMain()
 
 	// Base systems have been inited; enable cvar callbacks
 	cvar_t::EnableCallbacks();
+
+#ifdef ANDROID
+	// Apply Android-specific performance defaults
+	extern void Android_ApplyDefaults();
+	Android_ApplyDefaults();
+#endif
 
 	// [RH] User-configurable startup strings. Because BOOM does.
 	if (GStrings(STARTUP1)[0])	PrintFmt(PRINT_HIGH, "{}\n", GStrings(STARTUP1));

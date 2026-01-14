@@ -245,6 +245,19 @@ ISDL20TextureWindowSurfaceManager::ISDL20TextureWindowSurfaceManager(
 	if (mSDLRenderer == NULL)
 		I_FatalError("I_InitVideo: unable to create SDL2 renderer: {}\n", SDL_GetError());
 
+#ifdef ANDROID
+	// Log renderer info on Android to verify hardware acceleration
+	SDL_RendererInfo info;
+	if (SDL_GetRendererInfo(mSDLRenderer, &info) == 0)
+	{
+		SDL_Log("SDL Renderer: %s (flags: 0x%x)", info.name, info.flags);
+		if (info.flags & SDL_RENDERER_ACCELERATED)
+			SDL_Log("Renderer is HARDWARE ACCELERATED");
+		if (info.flags & SDL_RENDERER_SOFTWARE)
+			SDL_Log("WARNING: Renderer is SOFTWARE");
+	}
+#endif
+
 	const IVideoMode& native_mode = I_GetVideoCapabilities()->getNativeMode();
 	if (vid_widescreen.asInt() == 0 && vid_pillarbox && (3 * native_mode.width > 4 * native_mode.height))
 	{
@@ -277,10 +290,14 @@ ISDL20TextureWindowSurfaceManager::ISDL20TextureWindowSurfaceManager(
 
     SDL_DisplayMode sdl_mode;
     SDL_GetWindowDisplayMode(mWindow->mSDLWindow, &sdl_mode);
+	uint32_t texture_format = sdl_mode.format;
+#ifdef ANDROID
+	SDL_Log("Using display native texture format: 0x%x", texture_format);
+#endif
 
 	mSDLTexture = SDL_CreateTexture(
 				mSDLRenderer,
-				sdl_mode.format,
+				texture_format,
 				texture_flags,
 				mWidth, mHeight);
 
@@ -291,10 +308,11 @@ ISDL20TextureWindowSurfaceManager::ISDL20TextureWindowSurfaceManager(
     if (mSurface->getBitsPerPixel() == 8)
 	{
 #ifdef __ANDROID__
-		// Android texture expects: byte0=X, byte1=B, byte2=G, byte3=R
-		// Create XBGR surface to match: A=shift0, B=shift8, G=shift16, R=shift24
+		// Android texture expects XBGR format: A=shift0, B=shift8, G=shift16, R=shift24
+		// This matches ABGR8888 texture format (byte order: R, G, B, A in memory)
 		PixelFormat surface32Format(32, 8, 8, 8, 8, 0, 24, 16, 8);
 		m8bppTo32BppSurface = new IWindowSurface(width, height, &surface32Format);
+		SDL_Log("Created 32bpp conversion surface: XBGR (matches ABGR8888)");
 #else
         m8bppTo32BppSurface = new IWindowSurface(width, height, mWindow->getPixelFormat());
 #endif
@@ -362,16 +380,85 @@ void ISDL20TextureWindowSurfaceManager::startRefresh()
 //
 void ISDL20TextureWindowSurfaceManager::finishRefresh()
 {
-    if (mSurface->getBitsPerPixel() == 8)
-    {
-        m8bppTo32BppSurface->blit(mSurface, 0, 0, mSurface->getWidth(), mSurface->getHeight(),
-                0, 0, m8bppTo32BppSurface->getWidth(), m8bppTo32BppSurface->getHeight());
-	    SDL_UpdateTexture(mSDLTexture, NULL, m8bppTo32BppSurface->getBuffer(), m8bppTo32BppSurface->getPitch());
-    }
-    else
-    {
-	   SDL_UpdateTexture(mSDLTexture, NULL, mSurface->getBuffer(), mSurface->getPitch());
-    }
+#ifdef ANDROID
+	static int frame_count = 0;
+	static uint32_t last_time = 0;
+	static uint32_t blit_time = 0, lock_time = 0, copy_time = 0, render_time = 0;
+	uint32_t start_time = SDL_GetTicks();
+#endif
+
+	void* pixels;
+	int pitch;
+	
+#ifdef ANDROID
+	uint32_t before_lock = SDL_GetTicks();
+#endif
+	
+	if (SDL_LockTexture(mSDLTexture, NULL, &pixels, &pitch) == 0)
+	{
+#ifdef ANDROID
+		lock_time += SDL_GetTicks() - before_lock;
+		uint32_t before_blit = SDL_GetTicks();
+#endif
+		
+		if (mSurface->getBitsPerPixel() == 8)
+		{
+			m8bppTo32BppSurface->blit(mSurface, 0, 0, mSurface->getWidth(), mSurface->getHeight(),
+					0, 0, m8bppTo32BppSurface->getWidth(), m8bppTo32BppSurface->getHeight());
+			
+#ifdef ANDROID
+			blit_time += SDL_GetTicks() - before_blit;
+			uint32_t before_copy = SDL_GetTicks();
+#endif
+			
+			// Copy to locked texture
+			const uint8_t* src = (const uint8_t*)m8bppTo32BppSurface->getBuffer();
+			uint8_t* dst = (uint8_t*)pixels;
+			int src_pitch = m8bppTo32BppSurface->getPitch();
+			int copy_pitch = std::min(src_pitch, pitch);
+			
+			for (int y = 0; y < m8bppTo32BppSurface->getHeight(); y++)
+			{
+				memcpy(dst, src, copy_pitch);
+				src += src_pitch;
+				dst += pitch;
+			}
+			
+#ifdef ANDROID
+			copy_time += SDL_GetTicks() - before_copy;
+#endif
+		}
+		else
+		{
+#ifdef ANDROID
+			blit_time += SDL_GetTicks() - before_blit;
+			uint32_t before_copy = SDL_GetTicks();
+#endif
+			
+			// Copy to locked texture
+			const uint8_t* src = (const uint8_t*)mSurface->getBuffer();
+			uint8_t* dst = (uint8_t*)pixels;
+			int src_pitch = mSurface->getPitch();
+			int copy_pitch = std::min(src_pitch, pitch);
+			
+			for (int y = 0; y < mSurface->getHeight(); y++)
+			{
+				memcpy(dst, src, copy_pitch);
+				src += src_pitch;
+				dst += pitch;
+			}
+			
+#ifdef ANDROID
+			copy_time += SDL_GetTicks() - before_copy;
+#endif
+		}
+		
+		SDL_UnlockTexture(mSDLTexture);
+	}
+
+#ifdef ANDROID
+	uint32_t before_render = SDL_GetTicks();
+#endif
 
 	if (mDrawLogicalRect)
 		SDL_RenderCopy(mSDLRenderer, mSDLTexture, NULL, &mLogicalRect);
@@ -379,6 +466,23 @@ void ISDL20TextureWindowSurfaceManager::finishRefresh()
 		SDL_RenderCopy(mSDLRenderer, mSDLTexture, NULL, NULL);
 
 	SDL_RenderPresent(mSDLRenderer);
+	
+#ifdef ANDROID
+	render_time += SDL_GetTicks() - before_render;
+	frame_count++;
+	
+	uint32_t now = SDL_GetTicks();
+	if (now - last_time >= 5000) // Log every 5 seconds
+	{
+		float fps = frame_count * 1000.0f / (now - last_time);
+		SDL_Log("FPS: %.1f | Blit: %ums Lock: %ums Copy: %ums Render: %ums", 
+			fps, blit_time/frame_count, lock_time/frame_count, 
+			copy_time/frame_count, render_time/frame_count);
+		last_time = now;
+		frame_count = 0;
+		blit_time = lock_time = copy_time = render_time = 0;
+	}
+#endif
 }
 
 

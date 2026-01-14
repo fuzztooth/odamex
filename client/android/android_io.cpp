@@ -42,6 +42,11 @@ static std::string s_externalDataPath;
 // Initialize Android-specific paths
 void InitializePaths()
 {
+	// Force OpenGL ES2 renderer BEFORE any SDL video initialization
+	SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengles2");
+	__android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG, 
+		"Set SDL_HINT_RENDER_DRIVER=opengles2 (early init)");
+	
 	// Get internal storage path from SDL
 	const char* internal = SDL_AndroidGetInternalStoragePath();
 	if (internal)
@@ -217,10 +222,15 @@ void LogMessage(int priority, const char* fmt, ...)
 
 } // namespace Android
 
-// C-linkage wrapper for use in C code
-extern "C" const char* Android_GetWadsPath()
+// Apply Android-specific defaults (call after cvar system is initialized)
+void Android_ApplyDefaults()
 {
-	return Android::GetWadsPath();
+	// Force 32bpp mode - it's faster on Android (no palette conversion overhead)
+	extern void AddCommandString(const std::string &cmd, uint32_t key);
+	AddCommandString("vid_32bpp 1", 0);
+	
+	__android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG, 
+		"Applied Android performance defaults: vid_32bpp=1");
 }
 
 #endif // ANDROID

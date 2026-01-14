@@ -193,6 +193,16 @@ if(TARGET SDL2::SDL2 OR TARGET SDL::SDL)
         target_compile_options(odamex PRIVATE -maltivec)
       endif()
       message(STATUS "Default SIMD flags set to AltiVec")
+    elseif(ANDROID)
+      # For Android ARM builds - NEON support
+      if(CMAKE_ANDROID_ARCH_ABI STREQUAL "armeabi-v7a")
+        # 32-bit ARM needs explicit NEON flag
+        target_compile_options(odamex PRIVATE -mfpu=neon)
+        message(STATUS "Default SIMD flags set to NEON for Android ARMv7")
+      elseif(CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
+        # 64-bit ARM has NEON enabled by default, no flag needed
+        message(STATUS "NEON enabled by default for Android ARM64")
+      endif()
     endif()
   else()
     message(STATUS "Default SIMD flags not used on user request")
