@@ -86,11 +86,16 @@ jobs:
         cmake -S libraries/protobuf/cmake -B build-protoc-host \
           -DCMAKE_BUILD_TYPE=Release \
           -Dprotobuf_BUILD_SHARED_LIBS=OFF \
-          -Dprotobuf_BUILD_TESTS=OFF
+          -Dprotobuf_BUILD_TESTS=OFF \
+          -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="${PWD}/build-protoc-host/bin"
         cmake --build build-protoc-host --target protoc
-        protoc_path=$(find build-protoc-host -type f -name protoc -perm /111 | head -n 1)
-        if [ -z "${protoc_path}" ]; then
+        protoc_path="build-protoc-host/bin/protoc"
+        if [ ! -f "${protoc_path}" ]; then
+          protoc_path=$(find build-protoc-host -type f \( -name protoc -o -name protoc.exe \) -print -quit)
+        fi
+        if [ -z "${protoc_path}" ] || [ ! -f "${protoc_path}" ]; then
           echo "protoc not found after build" >&2
+          find build-protoc-host -maxdepth 4 -type f | head -n 50 >&2
           exit 1
         fi
         mkdir -p android/app/src/main/cpp/protoc
