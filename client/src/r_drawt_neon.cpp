@@ -105,7 +105,7 @@ void R_DrawSpanD_NEON(void)
 	// Main NEON loop - process 4 pixels at once
 	if (batches > 0)
 	{
-		// Setup NEON constants - cast explicitly to avoid narrowing
+		// Setup NEON constants
 		int32x4_t ustep_vec = vdupq_n_s32((int32_t)(ustep * 4));
 		int32x4_t vstep_vec = vdupq_n_s32((int32_t)(vstep * 4));
 		
@@ -118,6 +118,9 @@ void R_DrawSpanD_NEON(void)
 		
 		int32x4_t ufrac_vec = vaddq_s32(vdupq_n_s32((int32_t)ufrac), u_offset_vec);
 		int32x4_t vfrac_vec = vaddq_s32(vdupq_n_s32((int32_t)vfrac), v_offset_vec);
+		
+		// Get shademap pointer for direct ARGB lookup
+		const argb_t* shademap_data = colormap.m_shademap;
 
 		while (batches--)
 		{
@@ -131,11 +134,22 @@ void R_DrawSpanD_NEON(void)
 			uint32_t u3 = (vgetq_lane_s32(ufrac_vec, 3) >> ushift) & umask;
 			uint32_t v3 = (vgetq_lane_s32(vfrac_vec, 3) >> vshift) & vmask;
 
-			// Fetch and translate pixels
-			dest[0] = colormap.shade(source[u0 | v0]);
-			dest[1] = colormap.shade(source[u1 | v1]);
-			dest[2] = colormap.shade(source[u2 | v2]);
-			dest[3] = colormap.shade(source[u3 | v3]);
+			// Fetch palette indices
+			byte p0 = source[u0 | v0];
+			byte p1 = source[u1 | v1];
+			byte p2 = source[u2 | v2];
+			byte p3 = source[u3 | v3];
+
+			// Load 4 ARGB pixels from shademap using palette indices
+			uint32_t colors[4];
+			colors[0] = shademap_data[p0];
+			colors[1] = shademap_data[p1];
+			colors[2] = shademap_data[p2];
+			colors[3] = shademap_data[p3];
+			
+			// Store 4 pixels at once
+			uint32x4_t pixel_vec = vld1q_u32(colors);
+			vst1q_u32((uint32_t*)dest, pixel_vec);
 
 			dest += 4;
 			
@@ -218,12 +232,15 @@ void r_dimpatchD_NEON(IWindowSurface* surface, argb_t color, int alpha, int x1, 
 
 	int invAlpha = 256 - alpha;
 
-	// Extract color components
-	uint8x8_t src_color = vdup_n_u8(0);
-	src_color = vset_lane_u8((color >> 16) & 0xFF, src_color, 0); // R
-	src_color = vset_lane_u8((color >> 8) & 0xFF, src_color, 1);  // G
-	src_color = vset_lane_u8(color & 0xFF, src_color, 2);         // B
+	// Extract source color components (format: R=24, G=16, B=8, X=0)
+	uint16_t sr = (color >> 24) & 0xFF;
+	uint16_t sg = (color >> 16) & 0xFF;
+	uint16_t sb = (color >> 8) & 0xFF;
 	
+	// Create NEON vectors for source color and alpha values
+	uint16x8_t sr_vec = vdupq_n_u16(sr);
+	uint16x8_t sg_vec = vdupq_n_u16(sg);
+	uint16x8_t sb_vec = vdupq_n_u16(sb);
 	uint16x8_t alpha_vec = vdupq_n_u16(alpha);
 	uint16x8_t inv_alpha_vec = vdupq_n_u16(invAlpha);
 
@@ -238,27 +255,32 @@ void r_dimpatchD_NEON(IWindowSurface* surface, argb_t color, int alpha, int x1, 
 			// Load 4 destination pixels
 			uint32x4_t dest_pixels = vld1q_u32((uint32_t*)line);
 			
-			// Simple alpha blend - more sophisticated version would use proper NEON alpha blending
-			for (int i = 0; i < 4; i++)
-			{
-				argb_t d = line[i];
-				// Framebuffer is in texture format: R=24, G=16, B=8, X=0
-				int dr = (d >> 24) & 0xFF;
-				int dg = (d >> 16) & 0xFF;
-				int db = (d >> 8) & 0xFF;
-				
-				// Input color (argb_t) uses same format: R=24, G=16, B=8
-				int sr = (color >> 24) & 0xFF;
-				int sg = (color >> 16) & 0xFF;
-				int sb = (color >> 8) & 0xFF;
-				
-				dr = (sr * alpha + dr * invAlpha) >> 8;
-				dg = (sg * alpha + dg * invAlpha) >> 8;
-				db = (sb * alpha + db * invAlpha) >> 8;
-				
-				// Write back in same format: R=24, G=16, B=8
-				line[i] = (dr << 24) | (dg << 16) | (db << 8) | (d & 0xFF);
-			}
+			// Extract R, G, B channels from 4 pixels
+			// Shift right and mask to get each channel
+			uint16x4_t dr_low = vmovn_u32(vshrq_n_u32(dest_pixels, 24));  // R channel
+			uint16x4_t dg_low = vmovn_u32(vshrq_n_u32(vandq_u32(dest_pixels, vdupq_n_u32(0x00FF0000)), 16)); // G channel
+			uint16x4_t db_low = vmovn_u32(vshrq_n_u32(vandq_u32(dest_pixels, vdupq_n_u32(0x0000FF00)), 8));  // B channel
+			uint32x4_t da_masked = vandq_u32(dest_pixels, vdupq_n_u32(0x000000FF));  // Preserve low byte
+			
+			// Expand to 16-bit for multiplication
+			uint16x8_t dr = vcombine_u16(dr_low, vdup_n_u16(0));
+			uint16x8_t dg = vcombine_u16(dg_low, vdup_n_u16(0));
+			uint16x8_t db = vcombine_u16(db_low, vdup_n_u16(0));
+			
+			// Alpha blend: result = (src * alpha + dest * invAlpha) >> 8
+			uint16x8_t r_blend = vshrq_n_u16(vaddq_u16(vmulq_u16(sr_vec, alpha_vec), vmulq_u16(dr, inv_alpha_vec)), 8);
+			uint16x8_t g_blend = vshrq_n_u16(vaddq_u16(vmulq_u16(sg_vec, alpha_vec), vmulq_u16(dg, inv_alpha_vec)), 8);
+			uint16x8_t b_blend = vshrq_n_u16(vaddq_u16(vmulq_u16(sb_vec, alpha_vec), vmulq_u16(db, inv_alpha_vec)), 8);
+			
+			// Pack back into 32-bit pixels (R=24, G=16, B=8, X=0)
+			uint32x4_t r_shifted = vshlq_n_u32(vmovl_u16(vget_low_u16(r_blend)), 24);
+			uint32x4_t g_shifted = vshlq_n_u32(vmovl_u16(vget_low_u16(g_blend)), 16);
+			uint32x4_t b_shifted = vshlq_n_u32(vmovl_u16(vget_low_u16(b_blend)), 8);
+			
+			uint32x4_t result = vorrq_u32(vorrq_u32(r_shifted, g_shifted), vorrq_u32(b_shifted, da_masked));
+			
+			// Store 4 blended pixels
+			vst1q_u32((uint32_t*)line, result);
 			
 			line += 4;
 			count -= 4;
