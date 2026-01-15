@@ -1,20 +1,5 @@
 include(OdamexTargetSettings)
 
-# For Android cross-compilation, use host protoc
-if(ANDROID)
-  set(_HOST_PROTOC_PATH "${CMAKE_SOURCE_DIR}/libraries/protobuf-host/bin/protoc${CMAKE_EXECUTABLE_SUFFIX}")
-  set(_FALLBACK_PROTOC_PATH "${CMAKE_SOURCE_DIR}/android/app/src/main/cpp/protoc/protoc${CMAKE_EXECUTABLE_SUFFIX}")
-  if(EXISTS "${_HOST_PROTOC_PATH}")
-    set(protobuf_PROTOC_EXE "${_HOST_PROTOC_PATH}" CACHE FILEPATH "Host protoc for cross-compilation" FORCE)
-    message(STATUS "odaproto: Using host protoc at ${_HOST_PROTOC_PATH}")
-  elseif(EXISTS "${_FALLBACK_PROTOC_PATH}")
-    set(protobuf_PROTOC_EXE "${_FALLBACK_PROTOC_PATH}" CACHE FILEPATH "Host protoc for cross-compilation" FORCE)
-    message(STATUS "odaproto: Using host protoc at ${_FALLBACK_PROTOC_PATH}")
-  else()
-    message(FATAL_ERROR "Host protoc not found. Checked: ${_HOST_PROTOC_PATH}, ${_FALLBACK_PROTOC_PATH}. Run build-protoc.sh first.")
-  endif()
-endif()
-
 find_package(protobuf
   PATHS
     "${CMAKE_CURRENT_BINARY_DIR}/../libraries/protobuf-build/cmake"
@@ -22,9 +7,49 @@ find_package(protobuf
     "${CMAKE_CURRENT_BINARY_DIR}/../libraries/protobuf-build/lib64/cmake/protobuf"
   NO_DEFAULT_PATH)
 
+# For Android cross-compilation, detect host protoc executable
+if(ANDROID)
+  # Detect host platform for correct executable extension
+  if(CMAKE_HOST_WIN32)
+    set(_PROTOC_EXE_EXT ".exe")
+  else()
+    set(_PROTOC_EXE_EXT "")
+  endif()
+  
+  set(_HOST_PROTOC_PATH "${CMAKE_SOURCE_DIR}/libraries/protobuf-host/bin/protoc${_PROTOC_EXE_EXT}")
+  set(_FALLBACK_PROTOC_PATH "${CMAKE_SOURCE_DIR}/android/app/src/main/cpp/protoc/protoc${_PROTOC_EXE_EXT}")
+  
+  if(EXISTS "${_HOST_PROTOC_PATH}")
+    set(_ANDROID_PROTOC_EXE "${_HOST_PROTOC_PATH}")
+  elseif(EXISTS "${_FALLBACK_PROTOC_PATH}")
+    set(_ANDROID_PROTOC_EXE "${_FALLBACK_PROTOC_PATH}")
+  else()
+    message(FATAL_ERROR "Host protoc not found at ${_HOST_PROTOC_PATH} or ${_FALLBACK_PROTOC_PATH}. Run build-sdl2.sh first.")
+  endif()
+endif()
+
 set(ODAPROTO_PROTOS common.proto server.proto)
 
-protobuf_generate(OUT_VAR ODAPROTO_SOURCES PROTOS ${ODAPROTO_PROTOS})
+if(ANDROID AND DEFINED _ANDROID_PROTOC_EXE)
+  # For Android, use add_custom_command directly to bypass protobuf_generate issues
+  set(ODAPROTO_SOURCES)
+  foreach(_proto ${ODAPROTO_PROTOS})
+    get_filename_component(_proto_name ${_proto} NAME_WE)
+    set(_pb_cc "${CMAKE_CURRENT_BINARY_DIR}/${_proto_name}.pb.cc")
+    set(_pb_h "${CMAKE_CURRENT_BINARY_DIR}/${_proto_name}.pb.h")
+    add_custom_command(
+      OUTPUT ${_pb_cc} ${_pb_h}
+      COMMAND "${_ANDROID_PROTOC_EXE}"
+      ARGS --cpp_out=${CMAKE_CURRENT_BINARY_DIR} -I${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${_proto}
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${_proto}
+      COMMENT "Generating C++ protocol buffers for ${_proto}"
+      VERBATIM
+    )
+    list(APPEND ODAPROTO_SOURCES ${_pb_cc} ${_pb_h})
+  endforeach()
+else()
+  protobuf_generate(OUT_VAR ODAPROTO_SOURCES PROTOS ${ODAPROTO_PROTOS})
+endif()
 
 source_group("Definitions" FILES ${ODAPROTO_PROTOS})
 source_group("Generated" FILES ${ODAPROTO_SOURCES})
