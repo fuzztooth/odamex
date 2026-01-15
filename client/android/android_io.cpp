@@ -228,9 +228,11 @@ void Android_ApplyDefaults()
 	// Force 32bpp mode - it's faster on Android (no palette conversion overhead)
 	extern void AddCommandString(const std::string &cmd, uint32_t key);
 	AddCommandString("vid_32bpp 1", 0);
+	AddCommandString("vid_displayfps 2", 0);
+	AddCommandString("r_optimize detect", 0);
 	
 	__android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG, 
-		"Applied Android performance defaults: vid_32bpp=1");
+		"Applied Android performance defaults: vid_32bpp=1, vid_displayfps=2, r_optimize=detect");
 }
 
 #endif // ANDROID
