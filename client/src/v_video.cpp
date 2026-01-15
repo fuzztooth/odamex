@@ -668,9 +668,17 @@ void V_DrawFPSWidget()
 
 		::g_GraphData.push(delta_time_ms);
 
+		// Apply resolution-based scaling for better visibility on high-res displays
+		// Position stays in screen coordinates, but scale the dimensions and text
+		// Place at top of screen to avoid status bar
+		const int scaledGraphWidth = ::GRAPH_WIDTH * CleanXfac;
+		const int scaledGraphHeight = ::GRAPH_HEIGHT * CleanYfac;
+		const int baseX = 8;
+		const int baseY = 8;
+
 		const rectInt_t graphBox =
-		    M_RectFromDimensions(v2int_t(8, I_GetSurfaceHeight() / 2 + 16),
-		                         v2int_t(::GRAPH_WIDTH, ::GRAPH_HEIGHT));
+		    M_RectFromDimensions(v2int_t(baseX, baseY),
+		                         v2int_t(scaledGraphWidth, scaledGraphHeight));
 
 		// Data
 		for (int count = 1; count < ::GRAPH_WIDTH - 2; count++)
@@ -678,18 +686,18 @@ void V_DrawFPSWidget()
 			const double start = ::g_GraphData.getTail(count - 1);
 			const double end = ::g_GraphData.getTail(count);
 
-			const int startoff = ::g_GraphData.normalize(start) * (::GRAPH_HEIGHT - 2);
-			const int endoff = ::g_GraphData.normalize(end) * (::GRAPH_HEIGHT - 2);
+			const int startoff = ::g_GraphData.normalize(start) * (scaledGraphHeight - 2 * CleanYfac);
+			const int endoff = ::g_GraphData.normalize(end) * (scaledGraphHeight - 2 * CleanYfac);
 
-			const v2int_t startvec(graphBox.max.x - count, graphBox.max.y - startoff);
-			const v2int_t endvec(graphBox.max.x - count - 1, graphBox.max.y - endoff);
+			const v2int_t startvec(graphBox.max.x - count * CleanXfac, graphBox.max.y - startoff);
+			const v2int_t endvec(graphBox.max.x - (count + 1) * CleanXfac, graphBox.max.y - endoff);
 
 			screen->Line(startvec, endvec, argb_t(255, 255, 255));
 		}
 
 		// 35fps baseline
 		const int baseY35 =
-		    ::g_GraphData.normalize(::GRAPH_CAPPED_BASELINE) * (::GRAPH_HEIGHT - 2);
+		    ::g_GraphData.normalize(::GRAPH_CAPPED_BASELINE) * (scaledGraphHeight - 2 * CleanYfac);
 		const int offY35 = graphBox.max.y - baseY35;
 		if (offY35 > graphBox.min.y && offY35 < graphBox.max.y)
 		{
@@ -699,7 +707,7 @@ void V_DrawFPSWidget()
 
 		// 60fps Baseline
 		const int baseY60 =
-		    ::g_GraphData.normalize(::GRAPH_BASELINE) * (::GRAPH_HEIGHT - 2);
+		    ::g_GraphData.normalize(::GRAPH_BASELINE) * (scaledGraphHeight - 2 * CleanYfac);
 		const int offY60 = graphBox.max.y - baseY60;
 		if (offY60 > graphBox.min.y && offY60 < graphBox.max.y)
 		{
@@ -711,28 +719,29 @@ void V_DrawFPSWidget()
 		screen->Box(graphBox, argb_t(0xcb, 0xcb, 0xcb));
 
 		// Box Shadow
-		screen->Line(v2int_t(graphBox.min.x + 1, graphBox.max.y + 1),
-		             v2int_t(graphBox.max.x + 1, graphBox.max.y + 1),
+		screen->Line(v2int_t(graphBox.min.x + CleanXfac, graphBox.max.y + CleanYfac),
+		             v2int_t(graphBox.max.x + CleanXfac, graphBox.max.y + CleanYfac),
 		             argb_t(0x13, 0x13, 0x13));
-		screen->Line(v2int_t(graphBox.max.x + 1, graphBox.min.y + 1),
-		             v2int_t(graphBox.max.x + 1, graphBox.max.y + 1),
+		screen->Line(v2int_t(graphBox.max.x + CleanXfac, graphBox.min.y + CleanYfac),
+		             v2int_t(graphBox.max.x + CleanXfac, graphBox.max.y + CleanYfac),
 		             argb_t(0x13, 0x13, 0x13));
 
-		// Min
+		// Min - scale text with std::max to ensure at least 1
+		const int textScale = std::max(1, CleanXfac);
 		buffer = fmt::sprintf("%4.1f", ::g_GraphData.minimum);
-		screen->PrintStr(graphBox.max.x, graphBox.max.y - 3, buffer.c_str());
+		screen->PrintStr(graphBox.max.x, graphBox.max.y - 3 * CleanYfac, buffer.c_str(), -1, true, textScale);
 
 		// Max
 		buffer = fmt::sprintf("%4.1f", ::g_GraphData.maximum);
-		screen->PrintStr(graphBox.max.x, graphBox.min.y - 3, buffer.c_str());
+		screen->PrintStr(graphBox.max.x, graphBox.min.y - 3 * CleanYfac, buffer.c_str(), -1, true, textScale);
 
 		// Actual
 		buffer = fmt::sprintf("%4.1f", delta_time_ms);
-		screen->PrintStr(graphBox.max.x, graphBox.min.y + (::GRAPH_HEIGHT / 2) - 3,
-		                 buffer.c_str());
+		screen->PrintStr(graphBox.max.x, graphBox.min.y + (scaledGraphHeight / 2) - 3 * CleanYfac,
+		                 buffer.c_str(), -1, true, textScale);
 
 		// Name
-		screen->PrintStr(graphBox.min.x, graphBox.min.y - 8, "Frametime (ms)");
+		screen->PrintStr(graphBox.min.x, graphBox.min.y - 8 * CleanYfac, "Frametime (ms)", -1, true, textScale);
 
 		time_accum += delta_time;
 
@@ -749,13 +758,20 @@ void V_DrawFPSWidget()
 
 		// FPS counter
 		buffer = fmt::sprintf("FPS %5.1f", last_fps);
-		screen->PrintStr(graphBox.min.x, graphBox.max.y + 1, buffer.c_str());
+		screen->PrintStr(graphBox.min.x, graphBox.max.y + CleanYfac, buffer.c_str(), -1, true, textScale);
 	}
 	else if (vid_displayfps.asInt() == FPS_COUNTER)
 	{
 		static double last_fps = 0.0;
-		const v2int_t topleft(8, I_GetSurfaceHeight() / 2 + 16);
-		const v2int_t botleft(topleft.x, topleft.y + ::GRAPH_HEIGHT);
+		
+		// Apply resolution-based scaling for better visibility on high-res displays
+		// Position stays in screen coordinates, but scale the text
+		// Place at top of screen to avoid status bar
+		const int baseX = 8;
+		const int baseY = 8;
+		const int scaledGraphHeight = ::GRAPH_HEIGHT * CleanYfac;
+		const v2int_t topleft(baseX, baseY);
+		const v2int_t botleft(topleft.x, topleft.y + scaledGraphHeight);
 
 		time_accum += delta_time;
 
@@ -767,10 +783,11 @@ void V_DrawFPSWidget()
 			frame_count = 0;
 		}
 
-		// FPS counter
+		// FPS counter - scale text with std::max to ensure at least 1
+		const int textScale = std::max(1, CleanXfac);
 		std::string buffer;
 		buffer = fmt::sprintf("FPS %5.1f", last_fps);
-		screen->PrintStr(botleft.x, botleft.y + 1, buffer.c_str());
+		screen->PrintStr(botleft.x, botleft.y + CleanYfac, buffer.c_str(), -1, true, textScale);
 	}
 }
 
