@@ -43,6 +43,10 @@
 #include "v_text.h"
 #include "st_stuff.h"
 
+#ifdef ANDROID
+#include <android/log.h>
+#endif
+
 #undef RANGECHECK
 
 // status bar height at bottom of screen
@@ -1741,7 +1745,8 @@ enum r_optimize_kind {
 	OPTIMIZE_NONE,
 	OPTIMIZE_SSE2,
 	OPTIMIZE_MMX,
-	OPTIMIZE_ALTIVEC
+	OPTIMIZE_ALTIVEC,
+	OPTIMIZE_NEON
 };
 
 static r_optimize_kind optimize_kind = OPTIMIZE_NONE;
@@ -1754,6 +1759,7 @@ static const char *get_optimization_name(r_optimize_kind kind)
 		case OPTIMIZE_SSE2:    return "sse2";
 		case OPTIMIZE_MMX:     return "mmx";
 		case OPTIMIZE_ALTIVEC: return "altivec";
+		case OPTIMIZE_NEON:    return "neon";
 		case OPTIMIZE_NONE:
 		default:
 			return "none";
@@ -1794,15 +1800,52 @@ static bool detect_optimizations()
 	// Detect CPU features in ascending order of preference:
 	#ifdef __MMX__
 	if (SDL_HasMMX())
+	{
 		optimizations_available.push_back(OPTIMIZE_MMX);
+		#ifdef ANDROID
+		__android_log_print(ANDROID_LOG_INFO, "Odamex", "MMX detected and enabled");
+		#endif
+	}
 	#endif
 	#ifdef __SSE2__
 	if (SDL_HasSSE2())
+	{
 		optimizations_available.push_back(OPTIMIZE_SSE2);
+		#ifdef ANDROID
+		__android_log_print(ANDROID_LOG_INFO, "Odamex", "SSE2 detected and enabled");
+		#endif
+	}
+	#endif
+	#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+	#ifdef ANDROID
+	__android_log_print(ANDROID_LOG_INFO, "Odamex", "__ARM_NEON is defined, checking SDL_HasNEON()...");
+	#endif
+	if (SDL_HasNEON())
+	{
+		optimizations_available.push_back(OPTIMIZE_NEON);
+		#ifdef ANDROID
+		__android_log_print(ANDROID_LOG_INFO, "Odamex", "ARM NEON detected and enabled");
+		#endif
+	}
+	#ifdef ANDROID
+	else
+	{
+		__android_log_print(ANDROID_LOG_WARN, "Odamex", "ARM NEON NOT detected by SDL - using C fallback");
+	}
+	#endif
 	#endif
 	#ifdef __ALTIVEC__
 	if (SDL_HasAltiVec())
+	{
 		optimizations_available.push_back(OPTIMIZE_ALTIVEC);
+		#ifdef ANDROID
+		__android_log_print(ANDROID_LOG_INFO, "Odamex", "AltiVec detected and enabled");
+		#endif
+	}
+	#endif
+
+	#ifdef ANDROID
+	__android_log_print(ANDROID_LOG_INFO, "Odamex", "Total optimizations available: %d", (int)optimizations_available.size());
 	#endif
 
 	return true;
@@ -1825,6 +1868,11 @@ CVAR_FUNC_IMPL(r_optimize)
 {
 	const char* val = var.cstring();
 
+	#ifdef ANDROID
+	__android_log_print(ANDROID_LOG_INFO, "Odamex", "r_optimize callback: val='%s', optimize_kind=%s", 
+		val, get_optimization_name(optimize_kind));
+	#endif
+
 	// Only print the detected list the first time:
 	if (detect_optimizations())
 		print_optimizations();
@@ -1836,11 +1884,19 @@ CVAR_FUNC_IMPL(r_optimize)
 		optimize_kind = OPTIMIZE_SSE2;
 	else if (stricmp(val, "mmx") == 0 && R_IsOptimizationAvailable(OPTIMIZE_MMX))
 		optimize_kind = OPTIMIZE_MMX;
+	else if (stricmp(val, "neon") == 0 && R_IsOptimizationAvailable(OPTIMIZE_NEON))
+		optimize_kind = OPTIMIZE_NEON;
 	else if (stricmp(val, "altivec") == 0 && R_IsOptimizationAvailable(OPTIMIZE_ALTIVEC))
 		optimize_kind = OPTIMIZE_ALTIVEC;
 	else if (stricmp(val, "detect") == 0)
+	{
 		// Default to the most preferred:
 		optimize_kind = optimizations_available.back();
+		#ifdef ANDROID
+		__android_log_print(ANDROID_LOG_INFO, "Odamex", "detect mode: selected %s from %d available", 
+			get_optimization_name(optimize_kind), (int)optimizations_available.size());
+		#endif
+	}
 	else
 	{
 		PrintFmt(PRINT_HIGH, "Invalid value for r_optimize. Availible options are \"{}, detect\"\n",
@@ -1857,10 +1913,16 @@ CVAR_FUNC_IMPL(r_optimize)
 		// update the cvar string
 		// this will trigger the callback to run a second time
 		PrintFmt(PRINT_HIGH, "r_optimize set to \"{}\" based on availability\n", optimize_name);
+		#ifdef ANDROID
+		__android_log_print(ANDROID_LOG_INFO, "Odamex", "r_optimize active: %s", optimize_name);
+		#endif
 		var.Set(optimize_name);
 	}
 	else
 	{
+		#ifdef ANDROID
+		__android_log_print(ANDROID_LOG_INFO, "Odamex", "r_optimize initialized: %s", optimize_name);
+		#endif
 		// cvar string is current, now intialize the drawing function pointers
 		R_InitVectorizedDrawers();
 		R_InitColumnDrawers();
@@ -1904,6 +1966,14 @@ void R_InitVectorizedDrawers()
 		R_DrawSpanD				= R_DrawSpanD_c;		// TODO
 		R_DrawSlopeSpanD		= R_DrawSlopeSpanD_c;	// TODO
 		r_dimpatchD             = r_dimpatchD_ALTIVEC;
+	}
+	#endif
+	#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+	else if (optimize_kind == OPTIMIZE_NEON)
+	{
+		R_DrawSpanD				= R_DrawSpanD_NEON;
+		R_DrawSlopeSpanD		= R_DrawSlopeSpanD_NEON;
+		r_dimpatchD             = r_dimpatchD_NEON;
 	}
 	#endif
 
