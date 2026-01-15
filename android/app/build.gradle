@@ -35,6 +35,8 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Use debug signing for easy installation without needing release keys
+            signingConfig signingConfigs.debug
             
             ndk {
                 debugSymbolLevel 'FULL'
@@ -129,14 +131,22 @@ tasks.register('copySDL2Headers') {
             return
         }
         
-        // Copy to both ABI build directories
-        ['arm64-v8a', 'armeabi-v7a'].each { abi ->
-            def destDir = file(".cxx/Debug/54633h3p/${abi}/libraries/local/include")
-            if (destDir.exists()) {
-                println "Copying SDL2 headers to ${destDir}"
-                copy {
-                    from sourceDir
-                    into destDir
+        // Copy to both Debug and Release build directories for all ABIs
+        ['Debug', 'Release'].each { buildType ->
+            ['arm64-v8a', 'armeabi-v7a'].each { abi ->
+                // Try to find the build directory (hash changes, so we search)
+                def cxxDir = file(".cxx/${buildType}")
+                if (cxxDir.exists()) {
+                    cxxDir.eachDir { hashDir ->
+                        def destDir = new File(hashDir, "${abi}/libraries/local/include")
+                        if (destDir.exists()) {
+                            println "Copying SDL2 headers to ${destDir}"
+                            copy {
+                                from sourceDir
+                                into destDir
+                            }
+                        }
+                    }
                 }
             }
         }
