@@ -1348,7 +1348,9 @@ public:
 	forceinline void operator()(byte c, argb_t* dest) const
 	{
 		const argb_t work = dest[fuzztable.getValue()];
-		*dest = work - ((work >> 2) & 0x3f3f3f);
+		// Android uses RGBA layout: A=byte0, R=byte3, G=byte2, B=byte1 (0xRGBX in uint32)
+		// Mask BEFORE shift to prevent channel bleeding: clear bottom 2 bits of each RGB channel
+		*dest = work - ((work & 0xFCFCFC00) >> 2);
 		fuzztable.incrementRow();
 	}
 };
