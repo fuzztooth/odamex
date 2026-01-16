@@ -256,6 +256,10 @@ ISDL20TextureWindowSurfaceManager::ISDL20TextureWindowSurfaceManager(
 			SDL_Log("Renderer is HARDWARE ACCELERATED");
 		if (info.flags & SDL_RENDERER_SOFTWARE)
 			SDL_Log("WARNING: Renderer is SOFTWARE");
+		if (info.flags & SDL_RENDERER_PRESENTVSYNC)
+			SDL_Log("VSYNC is ENABLED (locked to display refresh rate)");
+		else
+			SDL_Log("VSYNC is DISABLED");
 	}
 #endif
 
@@ -343,13 +347,25 @@ SDL_Renderer* ISDL20TextureWindowSurfaceManager::createRenderer(bool vsync) cons
 {
 	const char* driver = mWindow->getRendererDriver();
 
+#ifdef __ANDROID__
+	// Aggressive hints to minimize Android compositor delay
+	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");
+	SDL_SetHint(SDL_HINT_RENDER_BATCHING, "1");
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");  // Nearest neighbor, fastest
+	SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "1");
+	SDL_SetHint("SDL_HINT_ANDROID_SEPARATE_MOUSE_AND_TOUCH", "1");
+#endif
+
 	uint32_t renderer_flags = 0;
 	if (strncmp(driver, "software", strlen(driver)) == 0)
 		renderer_flags |= SDL_RENDERER_SOFTWARE;
 	else
 		renderer_flags |= SDL_RENDERER_ACCELERATED;
+
+#ifndef __ANDROID__
 	if (vsync)
 		renderer_flags |= SDL_RENDERER_PRESENTVSYNC;
+#endif
 
 	return SDL_CreateRenderer(mWindow->mSDLWindow, -1, renderer_flags);
 }
@@ -458,7 +474,9 @@ void ISDL20TextureWindowSurfaceManager::finishRefresh()
 	}
 
 #ifdef ANDROID
-	uint32_t before_render = SDL_GetTicks();
+	uint32_t before_copy = SDL_GetTicks();
+	// Clear the renderer before drawing to prevent smearing on orientation changes
+	SDL_RenderClear(mSDLRenderer);
 #endif
 
 	if (mDrawLogicalRect)
@@ -466,19 +484,25 @@ void ISDL20TextureWindowSurfaceManager::finishRefresh()
 	else
 		SDL_RenderCopy(mSDLRenderer, mSDLTexture, NULL, NULL);
 
+#ifdef ANDROID
+	uint32_t copy_time_ms = SDL_GetTicks() - before_copy;
+	uint32_t before_present = SDL_GetTicks();
+#endif
+
 	SDL_RenderPresent(mSDLRenderer);
 	
 #ifdef ANDROID
-	render_time += SDL_GetTicks() - before_render;
+	uint32_t present_time_ms = SDL_GetTicks() - before_present;
+	render_time += copy_time_ms + present_time_ms;
 	frame_count++;
 	
 	uint32_t now = SDL_GetTicks();
 	if (now - last_time >= 5000) // Log every 5 seconds
 	{
 		float fps = frame_count * 1000.0f / (now - last_time);
-		SDL_Log("FPS: %.1f | Blit: %ums Lock: %ums Copy: %ums Render: %ums", 
+		SDL_Log("FPS: %.1f | Blit: %ums Lock: %ums Copy: %ums Render: %ums (Present: %ums)", 
 			fps, blit_time/frame_count, lock_time/frame_count, 
-			copy_time/frame_count, render_time/frame_count);
+			copy_time/frame_count, render_time/frame_count, present_time_ms);
 		last_time = now;
 		frame_count = 0;
 		blit_time = lock_time = copy_time = render_time = 0;
@@ -515,6 +539,12 @@ ISDL20Window::ISDL20Window(uint16_t width, uint16_t height, uint8_t bpp, EWindow
 	PrintFmt(PRINT_HIGH, "V_Init: rendering mode \"{}\"\n", driver_name);
 
 	SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
+
+#ifdef __ANDROID__
+	// Android performance hints
+	SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
+	SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+#endif
 
 	uint32_t window_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
 
@@ -1008,6 +1038,12 @@ bool ISDL20Window::setMode(const IVideoMode& video_mode)
 
 	// Set the surface pixel format
 	PixelFormat format = buildSurfacePixelFormat(video_mode.bpp);
+	
+#ifdef __ANDROID__
+	SDL_Log("Video mode setup: requested_bpp=%d, format_bpp=%d, width=%d, height=%d",
+		video_mode.bpp, format.getBitsPerPixel(), video_mode.width, video_mode.height);
+#endif
+	
 	// Discover the argb_t pixel format
 	if (format.getBitsPerPixel() == 32)
 		argb_t::setChannels(format.getAPos(), format.getRPos(), format.getGPos(), format.getBPos());
@@ -1023,6 +1059,11 @@ bool ISDL20Window::setMode(const IVideoMode& video_mode)
 #endif
 	}
 	mVideoMode.bpp = format.getBitsPerPixel();
+	
+#ifdef __ANDROID__
+	SDL_Log("Final video mode: bpp=%d, vsync=%d, stretch_mode=%s",
+		mVideoMode.bpp, mVideoMode.vsync, mVideoMode.stretch_mode.c_str());
+#endif
 
 	mVideoMode.vsync = video_mode.vsync;
 	mVideoMode.stretch_mode = video_mode.stretch_mode;
