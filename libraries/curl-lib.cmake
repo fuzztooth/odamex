@@ -39,9 +39,8 @@ if(BUILD_CLIENT)
       # Manually create CURL::libcurl target for Android
       if(NOT TARGET CURL::libcurl)
         add_library(CURL::libcurl STATIC IMPORTED GLOBAL)
-        # CURL uses CMAKE_DEBUG_POSTFIX, so the library is libcurl-d.a in Debug builds
         set_target_properties(CURL::libcurl PROPERTIES
-          IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/local/lib/libcurl-d${libsuffix}"
+          IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/local/lib/libcurl${libsuffix}"
           INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_BINARY_DIR}/local/include"
         )
       endif()

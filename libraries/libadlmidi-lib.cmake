@@ -2,7 +2,7 @@
 
 if(BUILD_CLIENT)
   if(USE_INTERNAL_LIBADLMIDI)
-    lib_buildgen(LIBRARY libadlmidi PARAMS "-DCMAKE_DEBUG_POSTFIX=d")
+    lib_buildgen(LIBRARY libadlmidi)
     lib_build(LIBRARY libadlmidi)
   endif()
 

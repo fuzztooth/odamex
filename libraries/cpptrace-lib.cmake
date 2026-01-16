@@ -15,15 +15,14 @@ if(BUILD_CLIENT OR BUILD_SERVER)
       list(APPEND CPPTRACE_EXTRA_PARAMS 
         "-Dzstd_DIR=${CMAKE_CURRENT_BINARY_DIR}/local/lib/cmake/zstd"
         "-Dzstd_INCLUDE_DIR=${CMAKE_CURRENT_BINARY_DIR}/local/include"
-        "-Dzstd_LIBRARY=${CMAKE_CURRENT_BINARY_DIR}/local/lib/libzstdd.a"
+        "-Dzstd_LIBRARY=${CMAKE_CURRENT_BINARY_DIR}/local/lib/libzstd.a"
         "-DLIBDWARF_USE_ZLIB=OFF"
         "-DLIBDWARF_USE_ZSTD=OFF")
     endif()
     
     lib_buildgen(
       LIBRARY cpptrace
-      PARAMS "-DCMAKE_DEBUG_POSTFIX=d"
-             "-DCPPTRACE_USE_EXTERNAL_LIBDWARF=${USE_EXTERNAL_LIBDWARF}"
+      PARAMS "-DCPPTRACE_USE_EXTERNAL_LIBDWARF=${USE_EXTERNAL_LIBDWARF}"
              "-DCPPTRACE_USE_EXTERNAL_ZSTD=${CPPTRACE_USE_EXTERNAL_ZSTD}"
              ${CPPTRACE_EXTRA_PARAMS})
     lib_build(LIBRARY cpptrace)
@@ -44,9 +43,9 @@ if(BUILD_CLIENT OR BUILD_SERVER)
       # Manually create the cpptrace::cpptrace target
       add_library(cpptrace::cpptrace STATIC IMPORTED GLOBAL)
       set_target_properties(cpptrace::cpptrace PROPERTIES
-        IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/local/lib/libcpptraced.a"
+        IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/local/lib/libcpptrace.a"
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_BINARY_DIR}/local/include"
-        INTERFACE_LINK_LIBRARIES "zstd::libzstd_static;${CMAKE_CURRENT_BINARY_DIR}/local/lib/libdwarfd.a"
+        INTERFACE_LINK_LIBRARIES "zstd::libzstd_static;${CMAKE_CURRENT_BINARY_DIR}/local/lib/libdwarf.a"
       )
     else()
       find_package(cpptrace)
