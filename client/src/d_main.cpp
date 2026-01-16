@@ -243,10 +243,18 @@ void D_Display()
 	if (nodrawers || I_IsHeadless())
 		return; 				// for comparative timing / profiling
 
+#ifdef __ANDROID__
+	uint32_t disp_start = I_MSTime();
+#endif
+
 	BEGIN_STAT(D_Display);
 
 	// video mode must be changed before surfaces are locked in I_BeginUpdate
 	V_AdjustVideoMode();
+
+#ifdef __ANDROID__
+	uint32_t after_adjust = I_MSTime();
+#endif
 
 	I_BeginUpdate();
 
@@ -352,7 +360,43 @@ void D_Display()
 	C_DrawConsole();	// draw console
 	C_DisplayTicker(); // Display console tic
 	M_Drawer();			// menu is drawn even on top of everything
+	
+#ifdef __ANDROID__
+	uint32_t before_finish = I_MSTime();
+#endif
+	
 	I_FinishUpdate();	// page flip or blit buffer
+
+#ifdef __ANDROID__
+	uint32_t after_finish = I_MSTime();
+	static uint32_t frame_count = 0;
+	static uint32_t last_log = 0;
+	static uint32_t total_adjust = 0, total_begin = 0, total_render = 0, total_finish = 0;
+	
+	uint32_t begin_time = after_adjust - disp_start;
+	uint32_t render_time = before_finish - after_adjust;
+	uint32_t finish_time = after_finish - before_finish;
+	
+	total_adjust += 0; // V_AdjustVideoMode time (negligible, already done before BeginUpdate)
+	total_begin += begin_time;
+	total_render += render_time;
+	total_finish += finish_time;
+	frame_count++;
+	
+	if (disp_start - last_log >= 2000)
+	{
+		__android_log_print(ANDROID_LOG_INFO, "Odamex",
+			"D_Display breakdown: Frames=%u | Avg: BeginUpdate=%ums Render=%ums FinishUpdate=%ums Total=%ums",
+			frame_count, total_begin/frame_count, total_render/frame_count, 
+			total_finish/frame_count, (total_begin+total_render+total_finish)/frame_count);
+		last_log = disp_start;
+		frame_count = 0;
+		total_adjust = 0;
+		total_begin = 0;
+		total_render = 0;
+		total_finish = 0;
+	}
+#endif
 
 	END_STAT(D_Display);
 }

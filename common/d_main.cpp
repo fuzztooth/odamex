@@ -1188,9 +1188,27 @@ void STACK_ARGS D_ClearTaskSchedulers()
 //
 void D_RunTics(void (*sim_func)(), void(*display_func)())
 {
+#ifdef __ANDROID__
+	static uint32_t profile_frame_count = 0;
+	static uint32_t profile_last_log = 0;
+	static uint32_t profile_total_sim_time = 0;
+	static uint32_t profile_total_display_time = 0;
+	static uint32_t profile_total_sleep_time = 0;
+	static uint32_t profile_total_overhead_time = 0;
+	
+	const uint32_t frame_start = I_MSTime();
+#endif
+
 	D_InitTaskSchedulers(sim_func, display_func);
 
+#ifdef __ANDROID__
+	const uint32_t sim_start = I_MSTime();
+#endif
 	simulation_scheduler->run();
+#ifdef __ANDROID__
+	const uint32_t sim_end = I_MSTime();
+	profile_total_sim_time += (sim_end - sim_start);
+#endif
 
 #ifdef CLIENT_APP
 	// Use linear interpolation for rendering entities if the display
@@ -1204,7 +1222,14 @@ void D_RunTics(void (*sim_func)(), void(*display_func)())
 		render_lerp_amount = simulation_scheduler->getRemainder() * FRACUNIT;
 #endif
 
+#ifdef __ANDROID__
+	const uint32_t display_start = I_MSTime();
+#endif
 	display_scheduler->run();
+#ifdef __ANDROID__
+	const uint32_t display_end = I_MSTime();
+	profile_total_display_time += (display_end - display_start);
+#endif
 
 	if (timingdemo)
 		return;
@@ -1216,12 +1241,50 @@ void D_RunTics(void (*sim_func)(), void(*display_func)())
 
 	constexpr dtime_t max_sleep_amount = 1000LL * 1000LL;	// 1ms
 
+#ifdef __ANDROID__
+	const uint32_t sleep_start = I_MSTime();
+#endif
 	// Sleep in 1ms increments until the next scheduled task
 	for (dtime_t now = I_GetTime(); wake_time > now; now = I_GetTime())
 	{
 		const dtime_t sleep_amount = std::min<dtime_t>(max_sleep_amount, wake_time - now);
 		I_Sleep(sleep_amount);
 	}
+#ifdef __ANDROID__
+	const uint32_t sleep_end = I_MSTime();
+	profile_total_sleep_time += (sleep_end - sleep_start);
+	
+	const uint32_t frame_end = I_MSTime();
+	const uint32_t frame_time = frame_end - frame_start;
+	const uint32_t accounted_time = (sim_end - sim_start) + (display_end - display_start) + (sleep_end - sleep_start);
+	profile_total_overhead_time += (frame_time > accounted_time) ? (frame_time - accounted_time) : 0;
+	
+	profile_frame_count++;
+	
+	// Log every 2 seconds
+	if (frame_start - profile_last_log >= 2000)
+	{
+		const uint32_t elapsed = frame_start - profile_last_log;
+		const float fps = (profile_frame_count * 1000.0f) / elapsed;
+		const uint32_t avg_sim = profile_total_sim_time / profile_frame_count;
+		const uint32_t avg_display = profile_total_display_time / profile_frame_count;
+		const uint32_t avg_sleep = profile_total_sleep_time / profile_frame_count;
+		const uint32_t avg_overhead = profile_total_overhead_time / profile_frame_count;
+		const uint32_t avg_total = avg_sim + avg_display + avg_sleep + avg_overhead;
+		
+		__android_log_print(ANDROID_LOG_INFO, "Odamex", 
+			"D_RunTics: FPS=%.1f | Avg Frame=%ums (sim=%u display=%u sleep=%u overhead=%u) | sim_wake=%lld display_wake=%lld",
+			fps, avg_total, avg_sim, avg_display, avg_sleep, avg_overhead,
+			(long long)simulation_wake_time, (long long)display_wake_time);
+		
+		profile_last_log = frame_start;
+		profile_frame_count = 0;
+		profile_total_sim_time = 0;
+		profile_total_display_time = 0;
+		profile_total_sleep_time = 0;
+		profile_total_overhead_time = 0;
+	}
+#endif
 }
 
 VERSION_CONTROL (d_main_cpp, "$Id$")

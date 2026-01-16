@@ -43,6 +43,11 @@
 #include "am_map.h"
 #include "cl_demo.h"
 
+#ifdef ANDROID
+#include <android/log.h>
+#include "i_time.h"
+#endif
+
 extern NetDemo netdemo;
 
 #define DISTMAP			2
@@ -985,6 +990,13 @@ void R_SetSkyForegroundDrawFuncs()
 //
 void R_RenderPlayerView(player_t* player)
 {
+#ifdef ANDROID
+	static int frame_count = 0;
+	static uint32_t last_log_time = 0;
+	uint32_t frame_start = I_MSTime();
+	uint32_t t0, t1, t_setup = 0, t_bsp = 0, t_planes = 0, t_masked = 0, t_blend = 0;
+#endif
+
 	// Recalculate the viewing window dimensions, if needed.
 	if (setsizeneeded)
 	{
@@ -998,6 +1010,9 @@ void R_RenderPlayerView(player_t* player)
 	if (!viewactive)
 		return;
 
+#ifdef ANDROID
+	t0 = I_MSTime();
+#endif
 	R_SetupFrame(player);
 
 	// Clear buffers.
@@ -1008,6 +1023,11 @@ void R_RenderPlayerView(player_t* player)
 	R_ClearSprites();
 
 	R_ResetDrawFuncs();
+
+#ifdef ANDROID
+	t1 = I_MSTime();
+	t_setup = t1 - t0;
+#endif
 
 	IWindowSurface* surface = R_GetRenderingSurface();
 
@@ -1026,6 +1046,10 @@ void R_RenderPlayerView(player_t* player)
 	// [RH] Setup particles for this frame
 	R_FindParticleSubsectors();
 
+#ifdef ANDROID
+	t0 = I_MSTime();
+#endif
+
     // [Russell] - From zdoom 1.22 source, added camera pointer check
 	// Never draw the player unless in chasecam mode
 	if (camera && camera->player && !(player->cheats & CF_CHASECAM))
@@ -1038,9 +1062,28 @@ void R_RenderPlayerView(player_t* player)
 	else
 		R_RenderBSPNode(numnodes - 1);	// The head node is the last node output.
 
+#ifdef ANDROID
+	t1 = I_MSTime();
+	t_bsp = t1 - t0;
+	t0 = t1;
+#endif
+
 	R_DrawPlanes();
 	R_DrawSkyBoxes();
+
+#ifdef ANDROID
+	t1 = I_MSTime();
+	t_planes = t1 - t0;
+	t0 = t1;
+#endif
+
 	R_DrawMasked();
+
+#ifdef ANDROID
+	t1 = I_MSTime();
+	t_masked = t1 - t0;
+	t0 = t1;
+#endif
 
 	// NOTE(jsd): Full-screen status color blending:
 	int blend_alpha = int(blend_color.geta() * 255.0f);
@@ -1049,6 +1092,26 @@ void R_RenderPlayerView(player_t* player)
 		r_dimpatchD(surface, V_GammaCorrect(blend_color), blend_alpha,
 						viewwindowx, viewwindowy, viewwidth, viewheight);
 	}
+
+#ifdef ANDROID
+	t1 = I_MSTime();
+	t_blend = t1 - t0;
+	
+	uint32_t frame_time = I_MSTime() - frame_start;
+	frame_count++;
+	
+	// Log every 2 seconds
+	if (frame_start - last_log_time >= 2000)
+	{
+		float avg_fps = frame_count / 2.0f;
+		__android_log_print(ANDROID_LOG_INFO, "Odamex", 
+			"FPS: %.1f | Frame: %ums (setup=%u bsp=%u planes=%u masked=%u blend=%u) | Res: %dx%d",
+			avg_fps, frame_time, t_setup, t_bsp, t_planes, t_masked, t_blend,
+			viewwidth, viewheight);
+		frame_count = 0;
+		last_log_time = frame_start;
+	}
+#endif
 
 	OInterpolation::getInstance().endGameInterpolation();
 }
