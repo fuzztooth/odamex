@@ -45,7 +45,8 @@ android {
             externalNativeBuild {
                 cmake {
                     arguments "-DCMAKE_BUILD_TYPE=Release",
-                              "-DCMAKE_GENERATOR=Ninja"
+                              "-DCMAKE_GENERATOR=Ninja",
+                              "-DBUILD_TESTS=OFF"
                 }
             }
         }

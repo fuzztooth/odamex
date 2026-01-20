@@ -126,13 +126,16 @@ namespace {
 #ifdef _WIN32
 				// Windows makes us ruthlessly kill the thread.
 				if (TerminateThread(m_thread.native_handle(), 0))
-#else
+#elif !defined(ANDROID)
 				// Pthreads lets us do a Cancel operation, which defaults to ending the
 				// thread when control is in a "cancelation point" function.  Fortunately
 				// the thread is going to be blocked in read() or pthread_cond_wait() via
 				// std::getline and std::condition_variable for the vast majority of its
 				// lifetime, so it cancels basically right away.
+				// Android doesn't support pthread_cancel, so we skip this there.
 				if (pthread_cancel(m_thread.native_handle()) == 0)
+#else
+				if (false) // Android: just detach the thread
 #endif
 				{
 					m_thread.join();

@@ -32,7 +32,7 @@ endif()
 
 if(WIN32)
   target_link_libraries(odagtest winmm wsock32 shlwapi)
-elseif(UNIX AND NOT APPLE)
+elseif(UNIX AND NOT APPLE AND NOT ANDROID)
   target_link_libraries(odagtest rt)
 endif()
 
